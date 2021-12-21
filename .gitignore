@@ -58,3 +58,7 @@ sysinfo.txt
 # Crashlytics generated file
 crashlytics-build.properties
 
+Main_Game/Library
+Main_Game/Temp
+Main_Game/obj
+Main_Game/Logs
