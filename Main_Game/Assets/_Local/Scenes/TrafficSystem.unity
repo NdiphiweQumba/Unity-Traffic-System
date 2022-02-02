@@ -201,7 +201,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   updateInt: 10
   newSplatMapRestoreCode: 0
-  toolbarInt: 4
+  toolbarInt: 0
   oldToolbarInt: 0
   roadToolbarInt: 0
   markerToolbarInt: 0
@@ -514,9 +514,9 @@ MonoBehaviour:
   selectedRoadRightInnerOffset: 0
   selectedCrossingMaterial: 0
   crossingTextureInfoIndex: 0
-  handleSelection: 1
+  handleSelection: 0
   positionHandleSelection: 1
-  markerDirXZ: 1
+  markerDirXZ: 0
   defaultCrossing: {fileID: 0}
   defaultTCrossing: {fileID: 0}
   defaultCulDeSac: {fileID: 0}
@@ -548,14 +548,14 @@ MonoBehaviour:
   osmTerrainBottomLon: 0
   osmTerrainLeftLat: 0
   osmTerrainRightLat: 0
-  terrainMinIndent: 1.4648438
+  terrainMinIndent: 0.5859375
   minIndent: 3
   minSurrounding: 3
   maxIndentSurrounding: 50
-  terrainY: 5.1
-  terrainDetailSplatX: 0.24414062
-  terrainDetailSplatY: 0.24414062
-  detailOffsetVec: {x: 0.24414062, y: 0, z: 0.24414062}
+  terrainY: 0
+  terrainDetailSplatX: 0.09765625
+  terrainDetailSplatY: 0.09765625
+  detailOffsetVec: {x: 0.09765625, y: 0, z: 0.09765625}
   raise: 0
   baseVector: {x: 0, y: 0, z: 0}
   mirrorCrossings: 1
@@ -744,8 +744,8 @@ MonoBehaviour:
   ODDCCQQCOQScript: {fileID: 0}
   OCCOQODQDQElement: -1
   OQDDOQOOCC: -1
-  OOODDOCCQC: {fileID: 0}
-  ODDOOCQDQD: {fileID: 0}
+  OOODDOCCQC: {fileID: 236994520}
+  ODDOOCQDQD: {fileID: 236994520}
   OQCCQCODCD: -1
   selectedRoadSOMarker: -1
   selectedMarkerNode: -1
@@ -2585,7 +2585,7 @@ MonoBehaviour:
   angleThresholdFlag: 0
   closedTrack: 0
   minNodeDistance: 5
-  nodeWithinRange: 19
+  nodeWithinRange: 0
   uvTiling: 1
   planarUVs: 0
   flipNormals: 0
@@ -26477,7 +26477,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1299213178}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -237, y: 5.1, z: -318}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -27425,24 +27425,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 52b3c3615833d764892863347770a2bc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  WheelFL: {fileID: 2031744648}
-  WheelFR: {fileID: 1202555267}
-  WheelBL: {fileID: 2110763141}
-  WheelBR: {fileID: 1124062057}
-  FL: {fileID: 1414184638}
-  FR: {fileID: 343486906}
-  BL: {fileID: 1427123124}
-  BR: {fileID: 386198324}
-  topSpeed: 250
+  VehicleInfo: []
+  TopSpeed: 0
   maxTorque: 200
   maxSteerAngle: 45
-  currentSpeed: 0
-  maxBrakeTorque: 2200
-  allWheelDrive: 0
-  rb: {fileID: 0}
+  turnAngle: 0
+  brake: 0
   Center: {fileID: 1952168162}
-  WayPoint: {fileID: 49049900}
-  dist: 0
+  CurrentWayPoint: {fileID: 0}
+  CurrentSpeed: 0
+  MaxBrakeTorque: 0
+  DistanceToWayPoint: 0
 --- !u!1 &2031744646
 GameObject:
   m_ObjectHideFlags: 0

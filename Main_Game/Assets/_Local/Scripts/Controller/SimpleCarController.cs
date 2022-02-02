@@ -2,144 +2,134 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+public class SimpleCarController : MonoBehaviour {
 
-public class SimpleCarController : MonoBehaviour
-{
-    public WheelCollider WheelFL;//the wheel colliders
-    public WheelCollider WheelFR;
-    public WheelCollider WheelBL;
-    public WheelCollider WheelBR;
+    public TrafficSystem TrafficSystem;
 
-    public GameObject FL;//the wheel gameobjects
-    public GameObject FR;
-    public GameObject BL;
-    public GameObject BR;
+    #region Private Fields
+    [SerializeField] private VehicleInfo[] VehicleInfo;
+    [SerializeField] private float TopSpeed; //the top speed
+    [SerializeField] private float maxTorque; //the maximum torque to apply to wheels
+    [SerializeField] private float maxSteerAngle;
 
-    public float topSpeed = 250f;//the top speed
-    public float maxTorque = 200f;//the maximum torque to apply to wheels
-    public float maxSteerAngle = 30f;
-    public float currentSpeed;
-    public float maxBrakeTorque = 2200;
+    private float forward; //forward axis
+    private float Turn; //turn axis
 
+    [SerializeField] private float turnAngle;
+    [SerializeField] private float brake; //brake axis
+    private Rigidbody RigidBody;
 
-    private float Forward;//forward axis
-    private float Turn;//turn axis
+    public Transform Center;
+    public Transform ForwardDirection;
 
-    private float TurnAngle;
-    private float Brake;//brake axis
+    private Transform NextWayPoint => CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint.transform;
+    [SerializeField] private Transform CurrentWayPoint;
+    private Vector3 RelativeVector;
+    #endregion
 
-
-	public bool allWheelDrive;
-
-	public Rigidbody rb;//rigid body of car
-
-    private Transform NextWayPoint => CurrentWayPoint.GetComponent<WayPoint>().NextWayPoint.transform;
-   public Transform Center;
-    public Transform CurrentWayPoint;
-
-    public Vector3 RelativeVector;
+    #region  Public Fields
+    public float CurrentSpeed;
+    public float MaxBrakeTorque;
     public float DistanceToWayPoint;
-    void Start ()  =>  rb = GetComponent<Rigidbody>();
-	void FixedUpdate ()   //fixed update is more physics realistic
-	{
-        DistanceToWayPoint = Vector3.Distance(CurrentWayPoint.transform.position, Center.transform.position);
 
-        RelativeVector = Center.transform.InverseTransformPoint(CurrentWayPoint.transform.position);
+    public bool ShouldStop;
+    public int StopArrivalNumber => TrafficSystem.count - 1;
+    public int WaitTimeAtStop;
+    public int Wait;
 
-        Debug.Log("Current WayPoint: " + CurrentWayPoint.transform.name);
+    public int countNumber;
+    #endregion
 
-        Forward = .2f;
-        Turn    = RelativeVector.x / RelativeVector.magnitude;
-        Brake   = 0;
+    void Start () => RigidBody = GetComponent<Rigidbody> ();
+    private void Update () {
+        //  Debug.Log("Wheel Center: " + (VehicleInfo[0].WheelColliderLeft.transform.position + VehicleInfo[0].WheelColliderRight.transform.position) / 2);
 
-        WheelFL.steerAngle = maxSteerAngle * Turn;
-        WheelFR.steerAngle = maxSteerAngle * Turn;
+        SpeedModifier ();
 
-        Debug.Log($"Relative vector X: {RelativeVector.x} Y: {RelativeVector.y} Z: {RelativeVector.z}");
+        countNumber = StopArrivalNumber;
+        foreach (var info in VehicleInfo) {
+            WheelCollider leftCollider = info.WheelColliderLeft;
+            WheelCollider rightCollider = info.WheelColliderRight;
 
-        Debug.Log("Wheel FL Steer Angle " + WheelFL.steerAngle);
-        Debug.Log("Wheel FR Steer Angle " + WheelFR.steerAngle);
+            GameObject leftVisualWheel = info.WheelVisualLeft;
+            GameObject rightVisualWheel = info.WheelVisualRight;
 
+            Quaternion quat; //rotation of wheel collider
+            Vector3 pos; //position of wheel collider
+            leftCollider.GetWorldPose (out pos, out quat); //get wheel collider position and rotation
+            leftVisualWheel.transform.position = pos;
+            leftVisualWheel.transform.rotation = quat;
 
-        currentSpeed = 2 * 22 / 7 * WheelBL.radius * WheelBL.rpm * 60 / 1000; //formula for calculating speed in kmph
-
-        if(currentSpeed < topSpeed)
-        {
-            WheelBL.motorTorque = maxTorque * Forward;//run the wheels on back left and back right
-            WheelBR.motorTorque = maxTorque * Forward;
+            rightCollider.GetWorldPose (out pos, out quat); //get wheel collider position and rotation
+            rightVisualWheel.transform.position = pos;
+            rightVisualWheel.transform.rotation = quat;
         }
-        else
-        {
-            WheelBL.motorTorque = 0;//run the wheels on back left and back right
-            WheelBR.motorTorque = 0;
-
-        }
-        //the top speed will not be accurate but will try to slow the car before top speed
-
-        WheelBL.brakeTorque = maxBrakeTorque * Brake;
-        WheelBR.brakeTorque = maxBrakeTorque * Brake;
-       // WheelFL.brakeTorque = maxBrakeTorque * Brake;
-       // WheelFR.brakeTorque = maxBrakeTorque * Brake;
-
-        if(DistanceToWayPoint < 1)
-           CurrentWayPoint = NextWayPoint;
     }
-    void Update()//update is called once per frame
+    private void FixedUpdate () //fixed update is more physics realistic
     {
-        Quaternion flq;//rotation of wheel collider
-        Vector3 flv;//position of wheel collider
-        WheelFL.GetWorldPose(out flv,out flq);//get wheel collider position and rotation
-        FL.transform.position = flv;
-        FL.transform.rotation = flq;
+        DistanceToWayPoint = Vector3.Distance (CurrentWayPoint.transform.position, (VehicleInfo[0].WheelColliderRight.transform.position +
+            VehicleInfo[0].WheelColliderLeft.transform.position) / 2);
+        RelativeVector = Center.InverseTransformPoint (CurrentWayPoint.transform.position);
 
-        Quaternion Blq;//rotation of wheel collider
-        Vector3 Blv;//position of wheel collider
-        WheelBL.GetWorldPose(out Blv, out Blq);//get wheel collider position and rotation
-        BL.transform.position = Blv;
-        BL.transform.rotation = Blq;
+        Turn = RelativeVector.x / RelativeVector.magnitude;
 
-        Quaternion fRq;//rotation of wheel collider
-        Vector3 fRv;//position of wheel collider
-        WheelFR.GetWorldPose(out fRv, out fRq);//get wheel collider position and rotation
-        FR.transform.position = fRv;
-        FR.transform.rotation = fRq;
+        foreach (var info in VehicleInfo) {
+            // Wheel Colliders left and right // 
+            var left = info.WheelColliderLeft;
+            var right = info.WheelColliderRight;
 
-        Quaternion BRq;//rotation of wheel collider
-        Vector3 BRv;//position of wheel collider
-        WheelBR.GetWorldPose(out BRv, out BRq);//get wheel collider position and rotation
-        BR.transform.position = BRv;
-        BR.transform.rotation = BRq;
+            if (info.Steer) {
+                info.WheelColliderLeft.steerAngle = maxSteerAngle * Turn;
+                info.WheelColliderRight.steerAngle = maxSteerAngle * Turn;
+            }
 
+            CurrentSpeed = 2 * 22 / 7 * left.radius * right.rpm * 60 / 1000; // Calculating speed in kmph
 
-		// All Wheel Drive //
-		AllWheelDrive ();
+            left.motorTorque = CurrentSpeed < TopSpeed && info.Motor ? maxTorque * forward : 0;
+            right.motorTorque = CurrentSpeed < TopSpeed && info.Motor ? maxTorque * forward : 0;
+
+            //the top speed will not be accurate but will try to slow the car before top speed
+            left.brakeTorque = info.Brakes || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
+            right.brakeTorque = info.Brakes || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
+        }
+
+        CurrentWayPoint = DistanceToWayPoint < 1 ? NextWayPoint : CurrentWayPoint;
+    }
+    private void SpeedModifier () {
+
+        RaycastHit hit;
+        if (Physics.Raycast (Center.transform.position, Center.transform.TransformDirection (Vector3.forward), out hit)) {
+            Debug.DrawRay (Center.transform.position, Center.transform.TransformDirection (Vector3.forward) * 10, Color.cyan);
+            if (hit.collider.tag == "Vehicle") {
+                forward = 0.00001f; // hit.collider.GetComponent<RigidBody> ().velocity.magnitude / 10;
+                Debug.Log ("Hit Vehicle");
+            } else {
+                forward = Random.Range (0.001f, 1f);
+            }
+
+        }
+
     }
 
-	// All Wheel Drive // 
-	void AllWheelDrive()
-	{
-		if (allWheelDrive) 
-		{
-			WheelBL.motorTorque = maxTorque * Forward;//run the wheels on back left and back right
-			WheelBR.motorTorque = maxTorque * Forward;
-			WheelFL.motorTorque = maxTorque * Forward;
-			WheelFR.motorTorque = maxTorque * Forward;
-		}
-	}
+    public IEnumerator VehicleWaitSeconds (float sec) {
+        yield return new WaitForSeconds (sec);
+        Wait = (int) sec;
+        ShouldStop = false;
+        TrafficSystem.LeaveStop ();
+    }
 
 }
 
 [System.Serializable]
-public class VeicleInfo: System.Object
-{
+public class VehicleInfo : System.Object {
     public WheelCollider WheelColliderLeft;
     public WheelCollider WheelColliderRight;
-
-    public GameObject    WheelVisualLefet;
+    public GameObject WheelVisualLeft;
     public GameObject WheelVisualRight;
 
-    public float Motor;
-    public float Steer;
+    public bool Motor;
+    public bool Steer;
+    public bool Brakes;
     public float ReverseTurn;
 
 }
