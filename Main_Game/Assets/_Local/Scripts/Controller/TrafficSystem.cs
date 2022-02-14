@@ -53,7 +53,7 @@ public class TrafficSystem : MonoBehaviour {
     }
     private void OnTriggerExit (Collider col) {
         if (col.tag == "Vehicle") {
-            // col.transform.GetComponent<SimpleCarController> ().ShouldStop = true;
+            col.transform.GetComponent<SimpleCarController> ().ShouldStop = true;
         }
     }
 

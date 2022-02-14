@@ -33,6 +33,7 @@ public class SimpleCarController : MonoBehaviour {
     public float DistanceToWayPoint;
 
     public bool ShouldStop;
+    public bool ObjectInFront;
     public int StopArrivalNumber => TrafficSystem.count - 1;
     public int WaitTimeAtStop;
     public int Wait;
@@ -89,22 +90,28 @@ public class SimpleCarController : MonoBehaviour {
             right.motorTorque = CurrentSpeed < TopSpeed && info.Motor ? maxTorque * forward : 0;
 
             //the top speed will not be accurate but will try to slow the car before top speed
-            left.brakeTorque = info.Brakes || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
-            right.brakeTorque = info.Brakes || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
+            left.brakeTorque = info.Brakes || ObjectInFront || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
+            right.brakeTorque = info.Brakes || ObjectInFront || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
         }
 
         CurrentWayPoint = DistanceToWayPoint < 1 ? NextWayPoint : CurrentWayPoint;
     }
     private void SpeedModifier () {
-
         RaycastHit hit;
         if (Physics.Raycast (Center.transform.position, Center.transform.TransformDirection (Vector3.forward), out hit)) {
             Debug.DrawRay (Center.transform.position, Center.transform.TransformDirection (Vector3.forward) * 10, Color.cyan);
             if (hit.collider.tag == "Vehicle") {
-                forward = 0.00001f; // hit.collider.GetComponent<RigidBody> ().velocity.magnitude / 10;
-                Debug.Log ("Hit Vehicle");
+                var dist = Vector3.Distance (Center.transform.position, hit.collider.GetComponent<Transform> ().transform.position);
+                forward = dist > 3.5f ? (hit.collider.GetComponent<SimpleCarController> ().forward * (dist / 2f)) : 0;
+                if (forward == 0) {
+                    ObjectInFront = true;
+                } else {
+                    ObjectInFront = false;
+                }
+                Debug.Log ($"Distance Between Vehicles is: {dist} and forward Input is : {forward}");
             } else {
-                forward = Random.Range (0.001f, 1f);
+                forward = Random.Range (0.001f, .5f);
+                //Debug.Log ("Nothing");
             }
 
         }
