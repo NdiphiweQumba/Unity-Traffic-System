@@ -5,7 +5,7 @@ using UnityEditor;
 using UnityEngine;
 
 public class WaypointEditor {
-    [DrawGizmo (GizmoType.NonSelected |GizmoType.Selected | GizmoType.Pickable )]
+    [DrawGizmo (GizmoType.NonSelected | GizmoType.Selected | GizmoType.Pickable)]
 
     public static void OnDrawSceneGizmo (WayPoint waypoint, GizmoType gizmotype) {
         if ((gizmotype & GizmoType.Selected) != 0) {
@@ -14,7 +14,7 @@ public class WaypointEditor {
             Gizmos.color = Color.yellow * .5f;
         }
 
-        Gizmos.DrawSphere (waypoint.transform.position, .12f);
+        Gizmos.DrawSphere (waypoint.transform.position, 1f);
 
         Gizmos.color = Color.white;
 

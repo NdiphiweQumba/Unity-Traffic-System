@@ -8,22 +8,25 @@ public class SimpleCarController : MonoBehaviour {
 
     #region Private Fields
     [SerializeField] private VehicleInfo[] VehicleInfo;
-    [SerializeField] private float TopSpeed; //the top speed
+
+    public float TopSpeed; //the top speed
     [SerializeField] private float maxTorque; //the maximum torque to apply to wheels
     [SerializeField] private float maxSteerAngle;
 
-    private float forward; //forward axis
+    [SerializeField] private float forward; //forward axis
     private float Turn; //turn axis
 
     [SerializeField] private float turnAngle;
     [SerializeField] private float brake; //brake axis
+    [SerializeField] private float accellerate = 0;
+
     private Rigidbody RigidBody;
 
     public Transform Center;
-    public Transform ForwardDirection;
 
-    private Transform NextWayPoint => CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint.transform;
-    [SerializeField] private Transform CurrentWayPoint;
+    [SerializeField] public Transform CurrentWayPoint;
+    public Transform NextWayPoint;
+
     private Vector3 RelativeVector;
     #endregion
 
@@ -37,17 +40,21 @@ public class SimpleCarController : MonoBehaviour {
     public int StopArrivalNumber => TrafficSystem.count - 1;
     public int WaitTimeAtStop;
     public int Wait;
-
+    public float m_RandomPerlin;
     public int countNumber;
+    public float dist;
     #endregion
 
+    void Awake () => m_RandomPerlin = Random.value * 100;
     void Start () => RigidBody = GetComponent<Rigidbody> ();
     private void Update () {
-        //  Debug.Log("Wheel Center: " + (VehicleInfo[0].WheelColliderLeft.transform.position + VehicleInfo[0].WheelColliderRight.transform.position) / 2);
-
-        SpeedModifier ();
-
         countNumber = StopArrivalNumber;
+
+        // Next WayPoint  // 
+
+    }
+    public void Drive (float turn, float accel, float brake) {
+
         foreach (var info in VehicleInfo) {
             WheelCollider leftCollider = info.WheelColliderLeft;
             WheelCollider rightCollider = info.WheelColliderRight;
@@ -64,58 +71,47 @@ public class SimpleCarController : MonoBehaviour {
             rightCollider.GetWorldPose (out pos, out quat); //get wheel collider position and rotation
             rightVisualWheel.transform.position = pos;
             rightVisualWheel.transform.rotation = quat;
-        }
-    }
-    private void FixedUpdate () //fixed update is more physics realistic
-    {
-        DistanceToWayPoint = Vector3.Distance (CurrentWayPoint.transform.position, (VehicleInfo[0].WheelColliderRight.transform.position +
-            VehicleInfo[0].WheelColliderLeft.transform.position) / 2);
-        RelativeVector = Center.InverseTransformPoint (CurrentWayPoint.transform.position);
 
-        Turn = RelativeVector.x / RelativeVector.magnitude;
+            turn = RelativeVector.x / RelativeVector.magnitude;
 
-        foreach (var info in VehicleInfo) {
             // Wheel Colliders left and right // 
             var left = info.WheelColliderLeft;
             var right = info.WheelColliderRight;
 
             if (info.Steer) {
-                info.WheelColliderLeft.steerAngle = maxSteerAngle * Turn;
-                info.WheelColliderRight.steerAngle = maxSteerAngle * Turn;
+                info.WheelColliderLeft.steerAngle = maxSteerAngle * turn;
+                info.WheelColliderRight.steerAngle = maxSteerAngle * turn;
             }
 
-            CurrentSpeed = 2 * 22 / 7 * left.radius * right.rpm * 60 / 1000; // Calculating speed in kmph
+            ////CurrentSpeed = 2 * 22 / 7 * left.radius * right.rpm * 60 / 1000; // Calculating speed in kmph
 
-            left.motorTorque = CurrentSpeed < TopSpeed && info.Motor ? maxTorque * forward : 0;
-            right.motorTorque = CurrentSpeed < TopSpeed && info.Motor ? maxTorque * forward : 0;
+            CurrentSpeed = RigidBody.velocity.magnitude * 2.23693629f;
+            left.motorTorque = maxTorque * accel;
+            right.motorTorque = maxTorque * accel;
 
             //the top speed will not be accurate but will try to slow the car before top speed
-            left.brakeTorque = info.Brakes || ObjectInFront || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
-            right.brakeTorque = info.Brakes || ObjectInFront || ShouldStop || Input.GetAxis ("Jump") > 0 ? MaxBrakeTorque * brake : 0;
+            left.brakeTorque = MaxBrakeTorque * brake;
+            right.brakeTorque = MaxBrakeTorque * brake;
         }
 
-        CurrentWayPoint = DistanceToWayPoint < 1 ? NextWayPoint : CurrentWayPoint;
-    }
-    private void SpeedModifier () {
-        RaycastHit hit;
-        if (Physics.Raycast (Center.transform.position, Center.transform.TransformDirection (Vector3.forward), out hit)) {
-            Debug.DrawRay (Center.transform.position, Center.transform.TransformDirection (Vector3.forward) * 10, Color.cyan);
-            if (hit.collider.tag == "Vehicle") {
-                var dist = Vector3.Distance (Center.transform.position, hit.collider.GetComponent<Transform> ().transform.position);
-                forward = dist > 3.5f ? (hit.collider.GetComponent<SimpleCarController> ().forward * (dist / 2f)) : 0;
-                if (forward == 0) {
-                    ObjectInFront = true;
-                } else {
-                    ObjectInFront = false;
-                }
-                Debug.Log ($"Distance Between Vehicles is: {dist} and forward Input is : {forward}");
+        DistanceToWayPoint = Vector3.Distance (CurrentWayPoint.transform.position, (VehicleInfo[0].WheelColliderRight.transform.position +
+            VehicleInfo[0].WheelColliderLeft.transform.position) / 2);
+        RelativeVector = Center.InverseTransformPoint (CurrentWayPoint.transform.position);
+
+        Debug.Log (DistanceToWayPoint < 7);
+
+        // if (CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint != null) CurrentWayPoint = DistanceToWayPoint < 7 ? NextWayPoint : CurrentWayPoint;
+        // else ChooseRandomWayPoint ();
+
+        if (DistanceToWayPoint < 7) {
+            if (CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint != null) {
+                NextWayPoint = CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint.transform;
             } else {
-                forward = Random.Range (0.001f, .5f);
-                //Debug.Log ("Nothing");
+                int randomPoint = Random.Range (0, CurrentWayPoint.GetComponent<WayPoint> ().WayPointsAround.Length);
+                NextWayPoint = CurrentWayPoint.GetComponent<WayPoint> ().WayPointsAround[randomPoint].transform;
             }
-
+            CurrentWayPoint = NextWayPoint;;
         }
-
     }
 
     public IEnumerator VehicleWaitSeconds (float sec) {

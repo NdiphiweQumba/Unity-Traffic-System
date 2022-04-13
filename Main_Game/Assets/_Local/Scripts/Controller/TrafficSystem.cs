@@ -32,29 +32,29 @@ public class TrafficSystem : MonoBehaviour {
         }
     }
     private void OnTriggerEnter (Collider col) {
-        if (col.tag == "Vehicle") {
-            var vehicleController = col.transform.GetComponent<SimpleCarController> ();
+        if (col.tag == "detector") {
+            var vehicleController = col.transform.parent.GetComponent<SimpleCarController> (); // Changing parent affects relative transform
             vehicleController.ShouldStop = true;
             StartCoroutine (vehicleController.VehicleWaitSeconds (vehicleController.WaitTimeAtStop));
             ArriveAtStop ();
         }
     }
-    private void OnTriggerStay (Collider col) {
-        if (col.tag == "Vehicle") {
+    /*     private void OnTriggerStay (Collider col) {
+            if (col.tag == "detector") {
 
-            var vehicleController = col.transform.GetComponent<SimpleCarController> ();
+                var vehicleController = col.transform.parent.parent.GetComponent<SimpleCarController> ();
 
-            if (vehicle.Contains (vehicleController.countNumber) || vehicleController.Wait == 0) {
-                vehicleController.ShouldStop = true;
-            } else {
-                vehicleController.ShouldStop = false;
+                if (vehicle.Contains (vehicleController.countNumber) || vehicleController.Wait == 0) {
+                    vehicleController.ShouldStop = true;
+                } else {
+                    vehicleController.ShouldStop = false;
+                }
             }
-        }
-    }
+        } */
     private void OnTriggerExit (Collider col) {
-        if (col.tag == "Vehicle") {
-            col.transform.GetComponent<SimpleCarController> ().ShouldStop = true;
-        }
+        // if (col.tag == "Vehicle") {
+        //     col.transform.GetComponent<SimpleCarController> ().ShouldStop = true;
+        // }
     }
 
 }
