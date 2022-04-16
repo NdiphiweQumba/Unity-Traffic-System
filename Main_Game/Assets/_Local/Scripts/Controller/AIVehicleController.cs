@@ -40,8 +40,6 @@ public class AIVehicleController : MonoBehaviour {
     public bool distancetoStops;
     public string FrontVehicleName;
 
-    [SerializeField] private int NrPupils, nrGroups, nrLeft, groupSize;
-
     int Limit = 1000;
 
     public float brakeValue = 0;
@@ -72,8 +70,9 @@ public class AIVehicleController : MonoBehaviour {
             var dist = Vector3.Distance (transform.localPosition, v.transform.localPosition);
             brakeValue = 1f / dist;
             accelValue = dist / .03f;
-            // hasDetectedObstacle = dist < maxDistToBrake && v.CurrentSpeed <=
-            //     GetComponent<SimpleCarController> ().CurrentSpeed;
+
+            hasDetectedObstacle = dist < maxDistToBrake && v.CurrentSpeed <=
+                GetComponent<SimpleCarController> ().CurrentSpeed;
 
             Vector3 otherVehicle = transform.localPosition - v.transform.localPosition;
 
@@ -94,7 +93,7 @@ public class AIVehicleController : MonoBehaviour {
 
     private void FixedUpdate () {
         var TopSpeed = SimpleCarController.TopSpeed;
-        if (!IsDriving) {
+        if (!IsDriving || SimpleCarController.ShouldStop) {
             SimpleCarController.Drive (0, 0, 1);
         } else {
             Vector3 forward = transform.forward;
