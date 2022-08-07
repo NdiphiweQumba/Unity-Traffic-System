@@ -20,9 +20,8 @@ public class SimpleCarController : MonoBehaviour {
     [SerializeField] private float brake; //brake axis
     [SerializeField] private float accellerate = 0;
 
-    private Rigidbody RigidBody;
+    public  Rigidbody RigidBody;
 
-    public Transform Center;
 
     [SerializeField] public Transform CurrentWayPoint;
     public Transform NextWayPoint;
@@ -37,7 +36,7 @@ public class SimpleCarController : MonoBehaviour {
 
     public bool ShouldStop;
     public bool ObjectInFront;
-    public int StopArrivalNumber => TrafficSystem.count - 1;
+    public int StopArrivalNumber =0;
     public int WaitTimeAtStop;
     public int Wait;
     public float m_RandomPerlin;
@@ -47,12 +46,7 @@ public class SimpleCarController : MonoBehaviour {
 
     void Awake () => m_RandomPerlin = Random.value * 100;
     void Start () => RigidBody = GetComponent<Rigidbody> ();
-    private void Update () {
-        countNumber = StopArrivalNumber;
-
-        // Next WayPoint  // 
-
-    }
+    
     public void Drive (float turn, float accel, float brake) {
 
         foreach (var info in VehicleInfo) {
@@ -96,12 +90,7 @@ public class SimpleCarController : MonoBehaviour {
 
         DistanceToWayPoint = Vector3.Distance (CurrentWayPoint.transform.position, (VehicleInfo[0].WheelColliderRight.transform.position +
             VehicleInfo[0].WheelColliderLeft.transform.position) / 2);
-        RelativeVector = Center.InverseTransformPoint (CurrentWayPoint.transform.position);
-
-        Debug.Log (DistanceToWayPoint < 7);
-
-        // if (CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint != null) CurrentWayPoint = DistanceToWayPoint < 7 ? NextWayPoint : CurrentWayPoint;
-        // else ChooseRandomWayPoint ();
+        RelativeVector = transform.InverseTransformPoint (CurrentWayPoint.transform.position);
 
         if (DistanceToWayPoint < 7) {
             if (CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint != null) {
@@ -110,7 +99,7 @@ public class SimpleCarController : MonoBehaviour {
                 int randomPoint = Random.Range (0, CurrentWayPoint.GetComponent<WayPoint> ().WayPointsAround.Length);
                 NextWayPoint = CurrentWayPoint.GetComponent<WayPoint> ().WayPointsAround[randomPoint].transform;
             }
-            CurrentWayPoint = NextWayPoint;;
+            CurrentWayPoint = NextWayPoint;
         }
     }
 
@@ -118,7 +107,6 @@ public class SimpleCarController : MonoBehaviour {
         yield return new WaitForSeconds (sec);
         Wait = (int) sec;
         ShouldStop = false;
-        TrafficSystem.LeaveStop ();
     }
 
 }
@@ -134,5 +122,4 @@ public class VehicleInfo : System.Object {
     public bool Steer;
     public bool Brakes;
     public float ReverseTurn;
-
 }

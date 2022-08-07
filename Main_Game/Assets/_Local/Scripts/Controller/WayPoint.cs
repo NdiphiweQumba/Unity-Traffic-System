@@ -4,10 +4,11 @@ using UnityEngine;
 
 public class WayPoint : MonoBehaviour {
     public WayPoint PreviousWayPoint;
-    public WayPoint CurrentWayPoint;
     public WayPoint NextWayPoint;
 
     public bool IsExitPoint;
+    public List<WayPoint> Next_Points = new List<WayPoint>();
+    [Space(20)]
     public WayPoint[] WayPointsAround;
 
     [Range (0f, 5f)]
@@ -22,5 +23,21 @@ public class WayPoint : MonoBehaviour {
     public void ChooseRandomWayPoint () {
         int randomPoint = Random.Range (0, WayPointsAround.Length);
         NextWayPoint = WayPointsAround[randomPoint];
+    }
+
+
+    private void OnValidate()
+    {
+        Next_Points.Clear();
+        NextFourWayPoints();
+    }
+    public void NextFourWayPoints()
+    {
+        var parent = transform.parent.GetComponentsInChildren<WayPoint>();
+        foreach (var item in parent)
+        {
+            if (item.transform.GetSiblingIndex() > transform.GetSiblingIndex())
+                Next_Points.Add(item);
+        }
     }
 }

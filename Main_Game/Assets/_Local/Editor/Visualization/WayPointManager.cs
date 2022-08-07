@@ -58,7 +58,6 @@ public class WayPointManager : EditorWindow
         {
             wayPoint.PreviousWayPoint = WayPointRoot.GetChild(WayPointRoot.childCount - 2).GetComponent<WayPoint>();
             wayPoint.PreviousWayPoint.NextWayPoint = wayPoint;
-            wayPoint.CurrentWayPoint = Selection.activeGameObject.GetComponent<WayPoint>();
             // Place waypoint at last position //
             wayPoint.transform.position = wayPoint.PreviousWayPoint.transform.position;
             waypointobject.transform.forward = wayPoint.PreviousWayPoint.transform.forward; 	
@@ -70,7 +69,8 @@ public class WayPointManager : EditorWindow
 	#endregion
 
 	#region Private 
-	private void MethodTest () {
+	private void OtherWayPoints () 
+    {
 
 	}
 	#endregion

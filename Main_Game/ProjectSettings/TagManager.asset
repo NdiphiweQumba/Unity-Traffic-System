@@ -6,6 +6,7 @@ TagManager:
   tags:
   - Vehicle
   - detector
+  - StopPoint
   layers:
   - Default
   - TransparentFX
