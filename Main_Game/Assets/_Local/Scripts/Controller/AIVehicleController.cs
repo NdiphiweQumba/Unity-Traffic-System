@@ -44,7 +44,7 @@ public class AIVehicleController : MonoBehaviour
 
     public float brakeValue = 0;
     public float accelValue = 0;
-
+    public bool  AutoDetect { get; private set; }
 
     public Vector3 stopPoint = new Vector3(0, 0, 0);
 
@@ -69,7 +69,7 @@ public class AIVehicleController : MonoBehaviour
     private void FixedUpdate()
     {
         var TopSpeed = SimpleCarController.TopSpeed;
-        if (!IsDriving)
+        if (!IsDriving || AutoDetect)
         {
             SimpleCarController.Drive(0, 0, 1);
         }
@@ -146,7 +146,13 @@ public class AIVehicleController : MonoBehaviour
             }
         }
     }
-
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.gameObject.CompareTag("Vehicle"))
+        {
+            AutoDetect = true;
+        }
+    }
     private void OnCollisionStay(Collision col)
     {
         // detect collision against other cars, so that we can take evasive action

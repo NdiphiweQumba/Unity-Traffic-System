@@ -2,8 +2,13 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class SimpleCarController : MonoBehaviour {
+public class SimpleCarController : MonoBehaviour
+{
+    public delegate void OnBrakePressed(bool val);
+    public event OnBrakePressed BrakePress;
 
+
+    public GameObject[] BackLights;
     public TrafficSystem TrafficSystem;
 
     #region Private Fields
@@ -46,7 +51,8 @@ public class SimpleCarController : MonoBehaviour {
 
     void Awake () => m_RandomPerlin = Random.value * 100;
     void Start () => RigidBody = GetComponent<Rigidbody> ();
-    
+  
+
     public void Drive (float turn, float accel, float brake) {
 
         foreach (var info in VehicleInfo) {
@@ -101,6 +107,8 @@ public class SimpleCarController : MonoBehaviour {
             }
             CurrentWayPoint = NextWayPoint;
         }
+
+        BrakePress?.Invoke(RigidBody.velocity.magnitude < 3f);
     }
 
     public IEnumerator VehicleWaitSeconds (float sec) {
@@ -108,7 +116,6 @@ public class SimpleCarController : MonoBehaviour {
         Wait = (int) sec;
         ShouldStop = false;
     }
-
 }
 
 [System.Serializable]
