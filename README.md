@@ -1,2 +1,2 @@
 # Unity-Traffic-System
-Fuzzy Logic traffic and pedestrian system test
+This is just a basic traffic AI
