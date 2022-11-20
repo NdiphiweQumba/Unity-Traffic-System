@@ -18,9 +18,13 @@ namespace UI
         }
         private void Update()
         {
-            
+            if (Input.GetKeyDown(KeyCode.Escape))
+                LeaveGame();
         }
-
+        public void LeaveGame()
+        {
+            Application.Quit();
+        }
         public void StartGame() => SceneManager.LoadScene(SceneName);
         public void OpenClosePanel(string panelName) 
         {

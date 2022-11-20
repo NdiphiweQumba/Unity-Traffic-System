@@ -14,6 +14,9 @@ public class AIVehicleController : MonoBehaviour
         WayPointDirection,
         WayPointDistance,
     }
+    public event System.Action<bool> OnCaution;
+
+
 
     public float m_CautiousSpeedFactor = 0.05f; // percentage of max speed to use when being maximally cautious
     [SerializeField][Range(0, 180)] private float m_CautiousMaxAngle = 50f; // angle of approaching corner to treat as warranting maximum caution
@@ -44,7 +47,6 @@ public class AIVehicleController : MonoBehaviour
 
     public float brakeValue = 0;
     public float accelValue = 0;
-    public bool  AutoDetect { get; private set; }
 
     public Vector3 stopPoint = new Vector3(0, 0, 0);
 
@@ -65,11 +67,16 @@ public class AIVehicleController : MonoBehaviour
         brakeValue = .1f;
         RandomPerlin = Random.value * 100;
     }
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape))
+            Application.Quit();
+    }
 
     private void FixedUpdate()
     {
         var TopSpeed = SimpleCarController.TopSpeed;
-        if (!IsDriving || AutoDetect)
+        if (!IsDriving)
         {
             SimpleCarController.Drive(0, 0, 1);
         }
@@ -138,21 +145,16 @@ public class AIVehicleController : MonoBehaviour
             {
                 if (SimpleCarController.NextWayPoint.GetComponent<WayPoint>().Next_Points.Count < 2)
                 { 
-                    StartCoroutine(BrakeRelease());
+                    StartCoroutine(BrakeRelease()); /// Use Collision Detection on this // 
                 }
              
                 if (IsDriving)
                     SimpleCarController.Drive(steer, accellerate * accelValue, 0);
             }
         }
+
     }
-    private void OnTriggerEnter(Collider other)
-    {
-        if (other.gameObject.CompareTag("Vehicle"))
-        {
-            AutoDetect = true;
-        }
-    }
+
     private void OnCollisionStay(Collision col)
     {
         // detect collision against other cars, so that we can take evasive action
@@ -163,7 +165,6 @@ public class AIVehicleController : MonoBehaviour
             {
                 // we'll take evasive action for 1 second
                 stopTimeFromOtherCar = Time.time + 1;
-                Debug.Log("Hit object");
                 // but who's in front?...
                 if (Vector3.Angle(transform.forward, otherAI.transform.position - transform.position) < 90)
                 {
@@ -207,4 +208,10 @@ public class AIVehicleController : MonoBehaviour
     }
 
     #endregion
+}
+[System.Serializable]
+public class ColHandler
+{
+    public string ColName;
+    public bool HasColl;
 }
