@@ -1,119 +1,168 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System;
 using UnityEngine;
 
-public class SimpleCarController : MonoBehaviour
+[RequireComponent(typeof(Rigidbody))]
+public class CarController : MonoBehaviour
 {
-    public delegate void OnBrakePressed(bool val);
-    public event OnBrakePressed BrakePress;
+	public Action<bool> BrakePress;
+	[Header("Wheels")]
+	public VehicleInfo[] VehicleInfo;
 
+	[Header("Car tuning")]
+	public float TopSpeed = 30f;             // meters per second
+	public float maxTorque = 1500f;
+	public float maxSteerAngle = 30f;        // degrees
+	public float MaxBrakeTorque = 3000f;
 
-    public GameObject[] BackLights;
+	[Header("Navigation")]
+	public Transform CurrentWayPoint;
+	public Transform NextWayPoint;
 
-    #region Private Fields
-    public VehicleInfo[] VehicleInfo;
+	[Header("Debug / runtime")]
+	public float CurrentSpeed { get; private set; } // m/s
+	public float DistanceToWayPoint { get; private set; }
 
-    public float TopSpeed; //the top speed
-    public float maxTorque; //the maximum torque to apply to wheels
-    public float maxSteerAngle;
+	private Rigidbody rb;
+	private Vector3 relativeVectorToWaypoint;
+	private float randomPerlin;
 
-    [SerializeField] private float forward; //forward axis
-    private float Turn; //turn axis
+	private float steerInputSmooth;
+	private float torqueInputSmooth;
+	private float brakeInputSmooth;
 
-    public float turnAngle;
-    [SerializeField] private float brake; //brake axis
-    [SerializeField] private float accellerate = 0;
-
-	private  Rigidbody RigidBody;
-
-    [SerializeField] public Transform CurrentWayPoint;
-    public Transform NextWayPoint;
-
-    private Vector3 RelativeVector;
-    #endregion
-
-    #region  Public Fields
-    public float CurrentSpeed;
-    public float MaxBrakeTorque;
-    public float DistanceToWayPoint;
-    public float m_RandomPerlin;
-    
-    #endregion End Public Fields
-
-	private void Awake () => m_RandomPerlin = Random.value * 100;
-	private void Start () => RigidBody = GetComponent<Rigidbody> ();
-  
-
-	public void Drive (float turn, float accel, float brake) 
+	private void Awake()
 	{
+		rb = GetComponent<Rigidbody>();
+		randomPerlin = UnityEngine.Random.value * 100f;
+	}
 
-	    foreach (var info in VehicleInfo) 
-	    {
-            WheelCollider leftCollider = info.WheelColliderLeft;
-            WheelCollider rightCollider = info.WheelColliderRight;
+	private void FixedUpdate()
+	{
+		// update current speed (m/s) and call BrakePress so lights or other listeners can respond
+		CurrentSpeed = rb.linearVelocity.magnitude;
+		BrakePress?.Invoke(rb.linearVelocity.magnitude < 0.5f && rb.linearVelocity.sqrMagnitude > 0f); // small threshold
+	}
 
-            GameObject leftVisualWheel = info.WheelVisualLeft;
-            GameObject rightVisualWheel = info.WheelVisualRight;
+	/// <summary>
+	/// Primary interface used by player or AI to drive the car.
+	/// steer: -1..1, accel: -1..1 (negative = reverse), brake: 0..1
+	/// </summary>
+	public void Drive(float steer, float accel, float brake)
+	{
+		// smooth the inputs to avoid jitter
+		steerInputSmooth = Mathf.Lerp(steerInputSmooth, steer, Time.fixedDeltaTime * 8f);
+		torqueInputSmooth = Mathf.Lerp(torqueInputSmooth, accel, Time.fixedDeltaTime * 4f);
+		brakeInputSmooth = Mathf.Lerp(brakeInputSmooth, brake, Time.fixedDeltaTime * 10f);
 
-            Quaternion quat; //rotation of wheel collider
-            Vector3 pos; //position of wheel collider
-            leftCollider.GetWorldPose (out pos, out quat); //get wheel collider position and rotation
-            leftVisualWheel.transform.position = pos;
-            leftVisualWheel.transform.rotation = quat;
+		// limit forward torque if over top speed (only reduce when same direction)
+		bool tryingToGoForward = torqueInputSmooth > 0 && rb.linearVelocity.magnitude > 0.1f && Vector3.Dot(transform.forward, rb.linearVelocity.normalized) > 0.5f;
+		float speedFactor = 1f;
+		if (tryingToGoForward && rb.linearVelocity.magnitude > TopSpeed)
+			speedFactor = Mathf.Clamp01(1f - ((rb.linearVelocity.magnitude - TopSpeed) / TopSpeed));
 
-            rightCollider.GetWorldPose (out pos, out quat); //get wheel collider position and rotation
-            rightVisualWheel.transform.position = pos;
-            rightVisualWheel.transform.rotation = quat;
+		foreach (var info in VehicleInfo)
+		{
+			if (info == null) continue;
 
-            turn = RelativeVector.x / RelativeVector.magnitude;
+			// update wheel visuals
+			if (info.WheelColliderLeft && info.WheelVisualLeft)
+			{
+				UpdateWheelPose(info.WheelColliderLeft, info.WheelVisualLeft);
+			}
+			if (info.WheelColliderRight && info.WheelVisualRight)
+			{
+				UpdateWheelPose(info.WheelColliderRight, info.WheelVisualRight);
+			}
 
-            // Wheel Colliders left and right // 
-            var left = info.WheelColliderLeft;
-            var right = info.WheelColliderRight;
+			// steering
+			if (info.Steer)
+			{
+				float targetAngle = maxSteerAngle * steerInputSmooth;
+				info.WheelColliderLeft.steerAngle = Mathf.Lerp(info.WheelColliderLeft.steerAngle, targetAngle, Time.fixedDeltaTime * 8f);
+				info.WheelColliderRight.steerAngle = Mathf.Lerp(info.WheelColliderRight.steerAngle, targetAngle, Time.fixedDeltaTime * 8f);
+			}
 
-            if (info.Steer) {
-                info.WheelColliderLeft.steerAngle = maxSteerAngle * turn;
-                info.WheelColliderRight.steerAngle = maxSteerAngle * turn;
-            }
+			// motor torque (applied only to motor wheels)
+			if (info.Motor)
+			{
+				float appliedTorque = maxTorque * torqueInputSmooth * speedFactor;
+				// reverse torque control
+				if (torqueInputSmooth < 0)
+					appliedTorque *= 0.5f; // reduce reverse torque
+				info.WheelColliderLeft.motorTorque = Mathf.Lerp(info.WheelColliderLeft.motorTorque, appliedTorque, Time.fixedDeltaTime * 4f);
+				info.WheelColliderRight.motorTorque = Mathf.Lerp(info.WheelColliderRight.motorTorque, appliedTorque, Time.fixedDeltaTime * 4f);
+			}
 
-            ////CurrentSpeed = 2 * 22 / 7 * left.radius * right.rpm * 60 / 1000; // Calculating speed in kmph
+			// brakes
+			if (info.Brakes)
+			{
+				float appliedBrake = MaxBrakeTorque * brakeInputSmooth;
+				// if braking while above top speed, add a bit more braking force
+				if (rb.linearVelocity.magnitude > TopSpeed) appliedBrake += (rb.linearVelocity.magnitude - TopSpeed) * 200f;
+				info.WheelColliderLeft.brakeTorque = Mathf.Lerp(info.WheelColliderLeft.brakeTorque, appliedBrake, Time.fixedDeltaTime * 10f);
+				info.WheelColliderRight.brakeTorque = Mathf.Lerp(info.WheelColliderRight.brakeTorque, appliedBrake, Time.fixedDeltaTime * 10f);
+			}
+		}
 
-            CurrentSpeed = RigidBody.linearVelocity.magnitude * 2.23693629f;
-            left.motorTorque = maxTorque * accel;
-            right.motorTorque = maxTorque * accel;
+		// update waypoint distances and relative vector (safe guard if CurrentWayPoint is null)
+		if (CurrentWayPoint != null)
+		{
+			Vector3 wheelCenter = GetWheelCenterPosition();
+			DistanceToWayPoint = Vector3.Distance(CurrentWayPoint.position, wheelCenter);
+			relativeVectorToWaypoint = transform.InverseTransformPoint(CurrentWayPoint.position);
 
-            //the top speed will not be accurate but will try to slow the car before top speed
-            left.brakeTorque = MaxBrakeTorque * brake;
-            right.brakeTorque = MaxBrakeTorque * brake;
-        }
+			if (DistanceToWayPoint < 7f)
+			{
+				var wp = CurrentWayPoint.GetComponent<WayPoint>();
+				if (wp != null)
+				{
+					if (wp.NextWayPoint != null)
+						NextWayPoint = wp.NextWayPoint.transform; // <-- use .transform
+					else if (wp.WayPointsAround != null && wp.WayPointsAround.Length > 0)
+						NextWayPoint = wp.WayPointsAround[UnityEngine.Random.Range(0, wp.WayPointsAround.Length)].transform; // <-- .transform
+				}
 
-        DistanceToWayPoint = Vector3.Distance (CurrentWayPoint.transform.position, (VehicleInfo[0].WheelColliderRight.transform.position +
-            VehicleInfo[0].WheelColliderLeft.transform.position) / 2);
-        RelativeVector = transform.InverseTransformPoint (CurrentWayPoint.transform.position);
+				if (NextWayPoint != null)
+					CurrentWayPoint = NextWayPoint;
+			}
+		}
+	}
 
-        if (DistanceToWayPoint < 7) {
-            if (CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint != null) {
-                NextWayPoint = CurrentWayPoint.GetComponent<WayPoint> ().NextWayPoint.transform;
-            } else {
-                int randomPoint = Random.Range (0, CurrentWayPoint.GetComponent<WayPoint> ().WayPointsAround.Length);
-                NextWayPoint = CurrentWayPoint.GetComponent<WayPoint> ().WayPointsAround[randomPoint].transform;
-            }
-            CurrentWayPoint = NextWayPoint;
-        }
+	private Vector3 GetWheelCenterPosition()
+	{
+		if (VehicleInfo != null && VehicleInfo.Length > 0 && VehicleInfo[0] != null)
+		{
+			var left = VehicleInfo[0].WheelColliderLeft;
+			var right = VehicleInfo[0].WheelColliderRight;
+			if (left && right)
+				return (left.transform.position + right.transform.position) / 2f;
+		}
+		return transform.position;
+	}
 
-        BrakePress?.Invoke(RigidBody.linearVelocity.magnitude < 3f);
-    }
-}
+	private void UpdateWheelPose(WheelCollider wc, GameObject vis)
+	{
+		if (wc == null || vis == null) return;
+		Quaternion quat;
+		Vector3 pos;
+		wc.GetWorldPose(out pos, out quat);
+		vis.transform.position = pos;
+		vis.transform.rotation = quat;
+	}
 
-[System.Serializable]
-public class VehicleInfo : System.Object {
-    public WheelCollider WheelColliderLeft;
-    public WheelCollider WheelColliderRight;
-    public GameObject WheelVisualLeft;
-    public GameObject WheelVisualRight;
+	private void OnDrawGizmosSelected()
+	{
+		Gizmos.color = Color.yellow;
+		Gizmos.DrawLine(transform.position, transform.position + transform.forward * 3f);
+		if (CurrentWayPoint)
+		{
+			Gizmos.color = Color.cyan;
+			Gizmos.DrawLine(transform.position, CurrentWayPoint.position);
+		}
+	}
 
-    public bool Motor;
-    public bool Steer;
-    public bool Brakes;
-    public float ReverseTurn;
+	private void OnDestroy()
+	{
+		BrakePress = null;
+	}
 }

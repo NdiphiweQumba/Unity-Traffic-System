@@ -1,47 +1,54 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
-public class WayPoint : MonoBehaviour {
-	
-	[ConditionalField(nameof(PreviousWayPoint), false)]
+/// <summary>
+/// Waypoint node used by AI and editor tools.
+/// PreviousWayPoint / NextWayPoint are WayPoint references for easy chaining and transform access.
+/// WayPointsAround contains alternative branches from this waypoint.
+/// </summary>
+[DisallowMultipleComponent]
+public class WayPoint : MonoBehaviour
+{
+	[Header("Links")]
 	public WayPoint PreviousWayPoint;
-	[ConditionalField(nameof(NextWayPoint), false)]
-    public WayPoint NextWayPoint;
+	public WayPoint NextWayPoint;
 
-    public bool IsExitPoint;
-	public List<WayPoint> Next_Points = new List<WayPoint>();
-    
-    [Space(20)]
-    public WayPoint[] WayPointsAround;
+	[Tooltip("Alternative branch waypoints (used when NextWayPoint is null).")]
+	public WayPoint[] WayPointsAround;
 
-    [Range (0f, 5f)]
-    public float Width = 2f;
+	[Header("Gizmo / lane width")]
+	[Tooltip("Lateral width for gizmos and path offset.")]
+	public float Width = 3f;
 
-    public Vector3 GetPosition () {
-        Vector3 minbound = transform.position + transform.right * Width / 2f;
-        Vector3 maxbound = transform.position - transform.right * Width / 2f;
+	/// <summary>
+	/// Convenient way to get NextWayPoint as a Transform (for compatibility with code that expects a Transform).
+	/// Returns null if there is no NextWayPoint.
+	/// </summary>
+	public Transform NextWayPointTransform => NextWayPoint != null ? NextWayPoint.transform : null;
 
-        return Vector3.Lerp (minbound, maxbound, Random.Range (0f, 1f));
-    }
-    public void ChooseRandomWayPoint () {
-        int randomPoint = Random.Range (0, WayPointsAround.Length);
-        NextWayPoint = WayPointsAround[randomPoint];
-    }
+	/// <summary>
+	/// Convenience helper: list of transforms for branching code that expects Transform[] or List&lt;Transform&gt;.
+	/// </summary>
+	public List<Transform> Next_Points
+	{
+		get
+		{
+			var list = new List<Transform>();
+			if (WayPointsAround != null)
+			{
+				for (int i = 0; i < WayPointsAround.Length; i++)
+					if (WayPointsAround[i] != null)
+						list.Add(WayPointsAround[i].transform);
+			}
+			return list;
+		}
+	}
 
-
-    private void OnValidate()
-    {
-        Next_Points.Clear();
-        NextFourWayPoints();
-    }
-    public void NextFourWayPoints()
-    {
-        var parent = transform.parent.GetComponentsInChildren<WayPoint>();
-        foreach (var item in parent)
-        {
-            if (item.transform.GetSiblingIndex() > transform.GetSiblingIndex())
-                Next_Points.Add(item);
-        }
-    }
+#if UNITY_EDITOR
+	// draw a small label in the editor (optional)
+	private void OnDrawGizmosSelected()
+	{
+		UnityEditor.Handles.Label(transform.position + Vector3.up * 0.25f, name);
+	}
+#endif
 }

@@ -1,218 +1,209 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-using Random = UnityEngine.Random;
 
-[RequireComponent(typeof(SimpleCarController))]
+[RequireComponent(typeof(CarController), typeof(Rigidbody))]
 public class AIVehicleController : MonoBehaviour
 {
+	[Header("Sensors")]
+	public float sensorLength = 10f;
+	public float sideSensorAngle = 30f;
+	public float sensorSpacing = 0.5f;
+	public LayerMask obstacleMask;
 
-    public enum AIBrake
-    {
-        NoBrake,
-        WayPointDirection,
-        WayPointDistance,
-    }
-    public event System.Action<bool> OnCaution;
+	[Header("Driving")]
+	public float stopDistance = 6f;    // distance to start strong braking for obstacle
+	public float slowDistance = 12f;   // distance to start slowing
+	[Range(0f, 1f)] public float accelDamping = 0.9f;
 
+	[Header("Behavior")]
+	public bool IsDriving = true;
+	[Tooltip("Used to nudge cars laterally so they don't take identical path")]
+	public float wanderAmount = 1.5f;
 
+	private CarController car;
+	private Rigidbody rb;
+	private float randomPerlin;
+	private float lastBrakeRequestTime = 0f;
+	private IntersectionZone currentIntersectionZone;
 
-    public float m_CautiousSpeedFactor = 0.05f; // percentage of max speed to use when being maximally cautious
-    [SerializeField][Range(0, 180)] private float m_CautiousMaxAngle = 50f; // angle of approaching corner to treat as warranting maximum caution
-    [SerializeField] private float m_CautiousMaxDistance = 100f; // distance at which distance-based cautiousness begins
-    [SerializeField] private float m_CautiousAngularVelocityFactor = 30f; // how cautious the AI should be when considering its own current angular velocity (i.e. easing off acceleration if spinning!)
-    [SerializeField] private float m_SteerSensitivity = 0.05f; // how sensitively the AI uses steering input to turn to the desired direction
-    [SerializeField] private float m_AccelSensitivity = 0.04f; // How sensitively the AI uses the accelerator to reach the current desired speed
-    [SerializeField] private float BrakeSens = 1f; // How sensitively the AI uses the brake to reach the current desired speed
-    [SerializeField] private float m_LateralWanderDistance = 3f; // how far the car will wander laterally towards its target
-    [SerializeField] private float m_LateralWanderSpeed = 0.1f; // how fast the lateral wandering will fluctuate
-    [SerializeField][Range(0, 1)] private float m_AccelWanderAmount = 0.1f; // how much the cars acceleration will wander
-    [SerializeField] private float m_AccelWanderSpeed = 0.1f; // how fast the cars acceleration wandering will fluctuate
-    [SerializeField] private AIBrake BrakeState = AIBrake.WayPointDistance; // what should the AI consider when accelerating/braking?
-    public bool IsDriving; // whether the AI is currently actively driving or stopped.
-    [SerializeField] private bool ShouldStopWhenTargetReached; // should we stop driving when we reach the target?
-    [SerializeField] private float m_ReachTargetThreshold = 2; // proximity to target to consider we 'reached' it, and stop driving.
-    [SerializeField] private readonly float maxDistToBrake = 10f;
-    private float RandomPerlin; // A random value for the car to base its wander on (so that AI cars don't all wander in the same pattern)
-    private SimpleCarController SimpleCarController; // Reference to actual car controller we are controlling
-    private float stopTimeFromOtherCar; // time until which to avoid the car we recently collided with
-    private float slowDownFactor; // how much to slow down due to colliding with another car, whilst avoiding
-    private float PathOffSet; // direction (-1 or 1) in which to offset path to avoid other car, whilst avoiding
-    private Rigidbody RigidBody;
+	private void Start()
+	{
+		car = GetComponent<CarController>();
+		rb = GetComponent<Rigidbody>();
+		randomPerlin = Random.value * 100f;
+		if (obstacleMask.value == 0)
+			obstacleMask = LayerMask.GetMask("Default"); // fallback
+	}
 
-    public Transform CarParent;
-    public bool distancetoStops;
-    public string FrontVehicleName;
+	private void FixedUpdate()
+	{
+		if (!car) return;
 
-    public float brakeValue = 0;
-    public float accelValue = 0;
+		if (!IsDriving)
+		{
+			car.Drive(0f, 0f, 1f);
+			return;
+		}
 
-    public Vector3 stopPoint = new Vector3(0, 0, 0);
+		// Navigation target is car.CurrentWayPoint
+		if (car.CurrentWayPoint == null)
+		{
+			car.Drive(0f, 0f, 0f);
+			return;
+		}
 
-    [Space(20)]
-    [SerializeField] private float DistanceToOtherVehicle;
-    [SerializeField] private bool hasDetectedObstacle;
-    [SerializeField] private bool starttimer;
-    [SerializeField] private bool DeadStop;
-    [SerializeField] private bool IsinFront;
+		// compute target offset so cars don't run exact center line
+		Vector3 targetPos = car.CurrentWayPoint.position;
+		targetPos += car.CurrentWayPoint.right * ((Mathf.PerlinNoise(Time.time * 0.1f, randomPerlin) * 2f - 1f) * wanderAmount);
 
-    [SerializeField] private float GetOtherCarSpeed = 0;
+		// basic steering to waypoint
+		Vector3 localTarget = transform.InverseTransformPoint(targetPos);
+		float steerAngle = Mathf.Clamp(Mathf.Atan2(localTarget.x, localTarget.z) * Mathf.Rad2Deg * 0.02f, -1f, 1f);
 
-    private void Start ()
-    {
-        SimpleCarController = GetComponent<SimpleCarController>();
-        RigidBody = GetComponent<Rigidbody>();
-        SimpleCarController[] v = CarParent.GetComponentsInChildren<SimpleCarController>().ToArray();
-        brakeValue = .1f;
-        RandomPerlin = Random.value * 100;
-    }
-    private void Update ()
-    {
-        if (Input.GetKeyDown(KeyCode.Escape))
-            Application.Quit();
-    }
+		// base desired speed by waypoint distance/angle
+		float desiredSpeed = car.TopSpeed;
+		float approachingAngle = Vector3.Angle(car.CurrentWayPoint.forward, rb.linearVelocity.sqrMagnitude > 0.1f ? rb.linearVelocity.normalized : transform.forward);
+		float angleFactor = Mathf.InverseLerp(0f, 90f, approachingAngle);
+		desiredSpeed = Mathf.Lerp(car.TopSpeed, car.TopSpeed * 0.5f, angleFactor);
 
-    private void FixedUpdate ()
-    {
-        var TopSpeed = SimpleCarController.TopSpeed;
-        if (!IsDriving)
-        {
-            SimpleCarController.Drive(0, 0, 1);
-        }
-        else
-        {
-            Vector3 forward = transform.forward;
-            if (RigidBody.linearVelocity.magnitude > TopSpeed * 0.1f)
-                forward = RigidBody.linearVelocity;
+		float distToWP = Vector3.Distance(transform.position, car.CurrentWayPoint.position);
+		float distFactor = Mathf.InverseLerp(0f, 100f, distToWP);
+		desiredSpeed = Mathf.Lerp(car.TopSpeed * 0.5f, car.TopSpeed, distFactor);
 
-            float desiredSpeed = TopSpeed;
+		// sensors - forward, slight left/right and side rays
+		bool obstacleInFront = false;
+		float obstacleDistance = Mathf.Infinity;
+		RaycastHit hit;
 
-            switch (BrakeState)
-            {
-                case AIBrake.WayPointDirection:
-                    {
-                        float approachingAngle = Vector3.Angle(SimpleCarController.CurrentWayPoint.forward, forward);
+		Vector3 sensorOrigin = transform.position + transform.up * 0.5f + transform.forward * 1.2f;
 
-                        float spinningAngle = RigidBody.angularVelocity.magnitude * 30f;
+		// center forward sensor
+		if (Physics.Raycast(sensorOrigin, transform.forward, out hit, sensorLength, obstacleMask))
+		{
+			obstacleInFront = true;
+			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
+		}
 
-                        float slowDown = Mathf.InverseLerp(0, 50f, Mathf.Max(spinningAngle, approachingAngle));
-                        desiredSpeed = Mathf.Lerp(TopSpeed, TopSpeed * .5f, slowDown);
-                        break;
-                    }
-                case AIBrake.WayPointDistance:
-                    {
-                        Vector3 delta = SimpleCarController.CurrentWayPoint.transform.position - transform.position; // Check
+		// angled sensors
+		Vector3 rightDir = Quaternion.AngleAxis(sideSensorAngle, transform.up) * transform.forward;
+		Vector3 leftDir = Quaternion.AngleAxis(-sideSensorAngle, transform.up) * transform.forward;
 
-                        Debug.Log("Wapoint Direction");
-                        float slowDownDistance = Mathf.InverseLerp(100f, 0, delta.magnitude);
+		if (Physics.Raycast(sensorOrigin, rightDir, out hit, sensorLength, obstacleMask))
+		{
+			obstacleInFront = true;
+			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
+			// steer away from obstacle
+			steerAngle -= 0.5f;
+		}
+		if (Physics.Raycast(sensorOrigin, leftDir, out hit, sensorLength, obstacleMask))
+		{
+			obstacleInFront = true;
+			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
+			steerAngle += 0.5f;
+		}
 
-                        float spinningAngle = RigidBody.angularVelocity.magnitude * 30f;
+		// lateral clearance sensors (helps avoid scraping at intersections)
+		Vector3 rightSensorOrigin = sensorOrigin + transform.right * sensorSpacing;
+		Vector3 leftSensorOrigin = sensorOrigin - transform.right * sensorSpacing;
+		if (Physics.Raycast(rightSensorOrigin, transform.forward, out hit, sensorLength, obstacleMask))
+		{
+			obstacleInFront = true;
+			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
+			steerAngle -= 0.2f;
+		}
+		if (Physics.Raycast(leftSensorOrigin, transform.forward, out hit, sensorLength, obstacleMask))
+		{
+			obstacleInFront = true;
+			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
+			steerAngle += 0.2f;
+		}
 
-                        float slowDown = Mathf.Max(Mathf.InverseLerp(0, 50f, spinningAngle), slowDownDistance);
-                        desiredSpeed = Mathf.Lerp(TopSpeed, TopSpeed * .5f, slowDown);
-                        break;
-                    }
-                case AIBrake.NoBrake:
+		// Intersection handling (if we're waiting for permission to enter intersection, we should stop)
+		if (currentIntersectionZone != null && !currentIntersectionZone.IsVehicleAllowedThrough(this.transform))
+		{
+			// slow to stop before intersection
+			float distToIntersection = currentIntersectionZone.DistanceToZone(transform.position);
+			if (distToIntersection < 10f)
+			{
+				// come to a full stop if close
+				car.Drive(0f, 0f, 1f);
+				return;
+			}
+			else
+			{
+				desiredSpeed = Mathf.Min(desiredSpeed, car.TopSpeed * 0.25f);
+			}
+		}
 
-                    break;
-            }
-            Vector3 targetPositionOffset = SimpleCarController.CurrentWayPoint.transform.position;
+		// If obstacle in front -> brake or reduce speed according to distance
+		float accelInput = 0f;
+		float brakeInput = 0f;
 
-            if (Time.time < stopTimeFromOtherCar)
-            {
-                desiredSpeed *= slowDownFactor;
-                targetPositionOffset += SimpleCarController.CurrentWayPoint.transform.right * PathOffSet;
-            }
-            else
-            {
-                targetPositionOffset += SimpleCarController.CurrentWayPoint.transform.right *
-                    (Mathf.PerlinNoise(Time.time * .1f, RandomPerlin) * 2 - 1) *
-                    2;
-            }
-            float InputSens = (desiredSpeed < SimpleCarController.CurrentSpeed) ? 1 : 0.04f;
+		if (obstacleInFront)
+		{
+			// strong braking if close
+			if (obstacleDistance < stopDistance)
+			{
+				brakeInput = 1f;
+				accelInput = 0f;
+			}
+			else if (obstacleDistance < slowDistance)
+			{
+				float slowFactor = Mathf.InverseLerp(slowDistance, stopDistance, obstacleDistance);
+				float targetSpeed = Mathf.Lerp(0f, desiredSpeed, slowFactor);
+				float speedDelta = targetSpeed - car.CurrentSpeed;
+				accelInput = Mathf.Clamp(speedDelta * 0.1f, -1f, 1f) * accelDamping;
+				brakeInput = speedDelta < -0.5f ? Mathf.Clamp(-speedDelta * 0.5f, 0f, 1f) : 0f;
+			}
+		}
+		else
+		{
+			// no obstacle -> go to desired speed smoothly
+			float speedDelta = desiredSpeed - car.CurrentSpeed;
+			accelInput = Mathf.Clamp(speedDelta * 0.05f, -1f, 1f);
+			brakeInput = 0f;
+		}
 
-            float accellerate = Mathf.Clamp((desiredSpeed - SimpleCarController.CurrentSpeed) * InputSens, -1, 1);
+		// small safety: if two vehicles approach from opposite directions (both trying to stop) prefer to yield if we are slower
+		// (handled by intersection zone and sensors)
 
-            accellerate *= (1 - .1f) + (Mathf.PerlinNoise(Time.time * .1f, RandomPerlin) * .1f);
+		// Apply drive (steer normalized -1..1)
+		steerAngle = Mathf.Clamp(steerAngle, -1f, 1f);
+		car.Drive(steerAngle, accelInput, brakeInput);
+	}
 
-            Vector3 localTarget = transform.InverseTransformPoint(targetPositionOffset);
+	private void OnTriggerEnter(Collider other)
+	{
+		// detect intersection zone (tag "IntersectionZone")
+		if (other.TryGetComponent<IntersectionZone>(out var zone))
+		{
+			currentIntersectionZone = zone;
+			currentIntersectionZone.VehicleEntered(this.transform);
+		}
 
-            float steertorwards = Mathf.Atan2(localTarget.x, localTarget.z) * Mathf.Rad2Deg;
+		if (other.CompareTag("StopPoint"))
+		{
+			// come to a dead stop
+			IsDriving = false;
+			StartCoroutine(ResumeAfterStop(1.5f));
+		}
+	}
 
-            float steer = Mathf.Clamp(steertorwards * .5f, -1, 1) * Mathf.Sign(SimpleCarController.CurrentSpeed);
+	private void OnTriggerExit(Collider other)
+	{
+		if (other.TryGetComponent<IntersectionZone>(out var zone))
+		{
+			if (currentIntersectionZone == zone)
+			{
+				zone.VehicleExited(this.transform);
+				currentIntersectionZone = null;
+			}
+		}
+	}
 
-            if (SimpleCarController.NextWayPoint != null)
-            {
-                if (SimpleCarController.NextWayPoint.GetComponent<WayPoint>().Next_Points.Count < 2)
-                {
-                    StartCoroutine(BrakeRelease()); /// Use Collision Detection on this // 
-                }
-
-                if (IsDriving)
-                    SimpleCarController.Drive(steer, accellerate * accelValue, 0);
-            }
-        }
-
-    }
-
-    private void OnCollisionStay (Collision col)
-    {
-        // detect collision against other cars, so that we can take evasive action
-        if (col.rigidbody != null)
-        {
-            var otherAI = col.rigidbody.GetComponent<SimpleCarController>();
-            if (otherAI != null)
-            {
-                // we'll take evasive action for 1 second
-                stopTimeFromOtherCar = Time.time + 1;
-                // but who's in front?...
-                if (Vector3.Angle(transform.forward, otherAI.transform.position - transform.position) < 90)
-                {
-                    // the other ai is in front, so it is only good manners that we ought to brake...
-                    slowDownFactor = 0.5f;
-                }
-                else
-                {
-                    // we're in front! ain't slowing down for anybody...
-                    slowDownFactor = 1;
-                }
-
-                // both cars should take evasive action by driving along an offset from the path centre,
-                // away from the other car
-                var otherCarLocalDelta = transform.InverseTransformPoint(otherAI.transform.position);
-                float otherCarAngle = Mathf.Atan2(otherCarLocalDelta.x, otherCarLocalDelta.z);
-                PathOffSet = 3 * -Mathf.Sign(otherCarAngle);
-            }
-        }
-    }
-    #region  Private Methods
-    private IEnumerator BrakeRelease ()
-    {
-        IsDriving = false;
-        yield return new WaitForSeconds(14);
-        IsDriving = true;
-    }
-    private void OnTriggerStay (Collider other)
-    {
-        if (other.CompareTag("StopPoint"))
-        {
-            DeadStop = true;
-        }
-    }
-    private void OnTriggerExit (Collider other)
-    {
-        if (other.CompareTag("StopPoint"))
-        {
-            DeadStop = false;
-        }
-    }
-
-    #endregion
-}
-[System.Serializable]
-public class ColHandler
-{
-    public string ColName;
-    public bool HasColl;
+	private IEnumerator ResumeAfterStop(float seconds)
+	{
+		yield return new WaitForSeconds(seconds);
+		IsDriving = true;
+	}
 }
