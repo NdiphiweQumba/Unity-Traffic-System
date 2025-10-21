@@ -1,11 +1,14 @@
-using UnityEditor;
+﻿using UnityEditor;
 using UnityEngine;
 
 
 public class WayPointManager : EditorWindow
  {
     #region Public Fields 
-    public Transform WayPointRoot;
+	 public Transform WayPointRoot;
+    
+    
+	 public Transform SidesParent;
     [MenuItem("Tools/Waypoint Editor")]
 	    public static void Open()
 	{
@@ -23,7 +26,8 @@ public class WayPointManager : EditorWindow
     {
         SerializedObject obj = new SerializedObject(this);
 
-        EditorGUILayout.PropertyField(obj.FindProperty("WayPointRoot"));
+	    EditorGUILayout.PropertyField(obj.FindProperty("WayPointRoot"));
+	    EditorGUILayout.PropertyField(obj.FindProperty("SidesParent"));
 
         if (WayPointRoot == null)
         {
@@ -44,13 +48,13 @@ public class WayPointManager : EditorWindow
     {
         if (GUILayout.Button("Create WayPoint"))
         {
-            CreateWayPoint();
+	        CreatePoint();
         }
     }
     private void CreateWayPoint()
     {
         GameObject waypointobject = new GameObject($"Waypoint  {WayPointRoot.childCount}", typeof(WayPoint));
-        waypointobject.transform.SetParent(WayPointRoot, false);
+	    waypointobject.transform.SetParent(WayPointRoot, false); // World Position reset
 
         WayPoint wayPoint = waypointobject.GetComponent<WayPoint>();
 
@@ -65,7 +69,19 @@ public class WayPointManager : EditorWindow
 
         Selection.activeGameObject = wayPoint.gameObject;
     }
-
+	 
+	 private void CreatePoint()
+	 {
+	 	GameObject obj = new GameObject($"Side {SidesParent.childCount}", typeof(WayPoint));
+	 
+	 	obj.transform.SetParent(SidesParent, false);
+	 	
+	 	WayPoint wp = obj.GetComponent<WayPoint>();
+	 	
+	 	wp.PreviousWayPoint = SidesParent.childCount > 1 ? SidesParent.GetChild(SidesParent.childCount - 2).GetComponent<WayPoint>() : null;
+	 	wp.PreviousWayPoint.NextWayPoint = wp; // when next gets created assign previous
+	 	
+	 }
 	#endregion
 
 	#region Private 

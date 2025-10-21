@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Drawing;
 using UnityEditor;
@@ -11,23 +11,23 @@ public class WaypointEditor {
     {
         if ((gizmotype & GizmoType.Selected) != 0)
         {
-            Gizmos.color = Color.yellow;
+            Gizmos.color = UnityEngine.Color.yellow;
         }
         else
         {
-            Gizmos.color = Color.yellow * .5f;
+            Gizmos.color = UnityEngine.Color.yellow * .5f;
         }
 
         Gizmos.DrawSphere(waypoint.transform.position, 1f);
 
-        Gizmos.color = Color.white;
+	    Gizmos.color = UnityEngine.Color.white;
 
         Gizmos.DrawLine(waypoint.transform.position + (waypoint.transform.right * waypoint.Width / 2),
             waypoint.transform.position - (waypoint.transform.right * waypoint.Width / 2));
 
         if (waypoint.PreviousWayPoint != null)
         {
-            Gizmos.color = Color.red;
+            Gizmos.color = UnityEngine.Color.red;
             Vector3 offset = waypoint.transform.right * waypoint.Width / 2f;
             Vector3 offsetto = waypoint.PreviousWayPoint.transform.right * waypoint.PreviousWayPoint.Width / 2f;
 
@@ -36,7 +36,7 @@ public class WaypointEditor {
 
         if (waypoint.NextWayPoint != null)
         {
-            Gizmos.color = Color.green;
+            Gizmos.color = UnityEngine.Color.green;
             Vector3 offset = waypoint.transform.right * -waypoint.Width / 2f;
             Vector3 offsetto = waypoint.NextWayPoint.transform.right * -waypoint.NextWayPoint.Width / 2f;
 

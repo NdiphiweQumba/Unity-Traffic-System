@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -59,7 +59,7 @@ public class AIVehicleController : MonoBehaviour
 
     [SerializeField] private float GetOtherCarSpeed = 0;
 
-    private void Start()
+    private void Start ()
     {
         SimpleCarController = GetComponent<SimpleCarController>();
         RigidBody = GetComponent<Rigidbody>();
@@ -67,13 +67,13 @@ public class AIVehicleController : MonoBehaviour
         brakeValue = .1f;
         RandomPerlin = Random.value * 100;
     }
-    private void Update()
+    private void Update ()
     {
         if (Input.GetKeyDown(KeyCode.Escape))
             Application.Quit();
     }
 
-    private void FixedUpdate()
+    private void FixedUpdate ()
     {
         var TopSpeed = SimpleCarController.TopSpeed;
         if (!IsDriving)
@@ -83,8 +83,8 @@ public class AIVehicleController : MonoBehaviour
         else
         {
             Vector3 forward = transform.forward;
-            if (RigidBody.velocity.magnitude > TopSpeed * 0.1f)
-                forward = RigidBody.velocity;
+            if (RigidBody.linearVelocity.magnitude > TopSpeed * 0.1f)
+                forward = RigidBody.linearVelocity;
 
             float desiredSpeed = TopSpeed;
 
@@ -104,6 +104,7 @@ public class AIVehicleController : MonoBehaviour
                     {
                         Vector3 delta = SimpleCarController.CurrentWayPoint.transform.position - transform.position; // Check
 
+                        Debug.Log("Wapoint Direction");
                         float slowDownDistance = Mathf.InverseLerp(100f, 0, delta.magnitude);
 
                         float spinningAngle = RigidBody.angularVelocity.magnitude * 30f;
@@ -144,10 +145,10 @@ public class AIVehicleController : MonoBehaviour
             if (SimpleCarController.NextWayPoint != null)
             {
                 if (SimpleCarController.NextWayPoint.GetComponent<WayPoint>().Next_Points.Count < 2)
-                { 
+                {
                     StartCoroutine(BrakeRelease()); /// Use Collision Detection on this // 
                 }
-             
+
                 if (IsDriving)
                     SimpleCarController.Drive(steer, accellerate * accelValue, 0);
             }
@@ -155,7 +156,7 @@ public class AIVehicleController : MonoBehaviour
 
     }
 
-    private void OnCollisionStay(Collision col)
+    private void OnCollisionStay (Collision col)
     {
         // detect collision against other cars, so that we can take evasive action
         if (col.rigidbody != null)
@@ -186,20 +187,20 @@ public class AIVehicleController : MonoBehaviour
         }
     }
     #region  Private Methods
-    private IEnumerator BrakeRelease()
+    private IEnumerator BrakeRelease ()
     {
         IsDriving = false;
         yield return new WaitForSeconds(14);
         IsDriving = true;
     }
-    private void OnTriggerStay(Collider other)
+    private void OnTriggerStay (Collider other)
     {
         if (other.CompareTag("StopPoint"))
         {
             DeadStop = true;
         }
     }
-    private void OnTriggerExit(Collider other)
+    private void OnTriggerExit (Collider other)
     {
         if (other.CompareTag("StopPoint"))
         {

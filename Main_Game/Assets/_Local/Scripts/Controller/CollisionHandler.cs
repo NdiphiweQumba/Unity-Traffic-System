@@ -7,7 +7,7 @@ public class CollisionHandler : MonoBehaviour
     
     [SerializeField]
     private Transform               Parent;
-    private GameObject              GameObjectHit;
+    private GameObject              hitObject;
     private AIVehicleController     Controller;
     private Vector3                 Origin;
     private Vector3                 Direection;
@@ -24,6 +24,7 @@ public class CollisionHandler : MonoBehaviour
     public LayerMask Mask;
     #endregion End Public Fields
 
+    #region  Monobehaviour Callbacks
     private void Awake()
     {
        // Controller.OnCaution += RedColor; //  Delegate what Happens when hit // 
@@ -41,16 +42,17 @@ public class CollisionHandler : MonoBehaviour
                                maxHitDistance, Mask,
                                QueryTriggerInteraction.UseGlobal))
         {
-            GameObjectHit = hit.transform.gameObject;
+            hitObject = hit.transform.gameObject;
             CurrentHitDistance = hit.distance;
         }
         else
         {
             CurrentHitDistance = maxHitDistance;
-            GameObjectHit = null;
+            hitObject = null;
         }
 
         raycastColor = CurrentHitDistance > maxSafeDistance ? Color.blue : Color.red;
+
     }
     private void OnDrawGizmos()
     {
@@ -58,8 +60,14 @@ public class CollisionHandler : MonoBehaviour
         Debug.DrawLine(Origin, Origin + Direection * CurrentHitDistance);
         Gizmos.DrawWireSphere(Origin + Direection * CurrentHitDistance, SphereRadius);
     }
+    #endregion End Monobehaviour callbacks
+
+
     public void RedColor(bool val)
     {
-        /// Do something when Red Sinal //
+        val = CurrentHitDistance > maxSafeDistance;
+        var vehicleController = Parent.GetComponent<SimpleCarController>();
+
+
     }
 }

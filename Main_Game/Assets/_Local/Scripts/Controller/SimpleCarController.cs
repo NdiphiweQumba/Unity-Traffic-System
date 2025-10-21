@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -9,24 +9,22 @@ public class SimpleCarController : MonoBehaviour
 
 
     public GameObject[] BackLights;
-    public TrafficSystem TrafficSystem;
 
     #region Private Fields
-    [SerializeField] private VehicleInfo[] VehicleInfo;
+    public VehicleInfo[] VehicleInfo;
 
     public float TopSpeed; //the top speed
-    [SerializeField] private float maxTorque; //the maximum torque to apply to wheels
-    [SerializeField] private float maxSteerAngle;
+    public float maxTorque; //the maximum torque to apply to wheels
+    public float maxSteerAngle;
 
     [SerializeField] private float forward; //forward axis
     private float Turn; //turn axis
 
-    [SerializeField] private float turnAngle;
+    public float turnAngle;
     [SerializeField] private float brake; //brake axis
     [SerializeField] private float accellerate = 0;
 
-    public  Rigidbody RigidBody;
-
+	private  Rigidbody RigidBody;
 
     [SerializeField] public Transform CurrentWayPoint;
     public Transform NextWayPoint;
@@ -38,24 +36,19 @@ public class SimpleCarController : MonoBehaviour
     public float CurrentSpeed;
     public float MaxBrakeTorque;
     public float DistanceToWayPoint;
-
-    public bool ShouldStop;
-    public bool ObjectInFront;
-    public int StopArrivalNumber =0;
-    public int WaitTimeAtStop;
-    public int Wait;
     public float m_RandomPerlin;
-    public int countNumber;
-    public float dist;
-    #endregion
+    
+    #endregion End Public Fields
 
-    void Awake () => m_RandomPerlin = Random.value * 100;
-    void Start () => RigidBody = GetComponent<Rigidbody> ();
+	private void Awake () => m_RandomPerlin = Random.value * 100;
+	private void Start () => RigidBody = GetComponent<Rigidbody> ();
   
 
-    public void Drive (float turn, float accel, float brake) {
+	public void Drive (float turn, float accel, float brake) 
+	{
 
-        foreach (var info in VehicleInfo) {
+	    foreach (var info in VehicleInfo) 
+	    {
             WheelCollider leftCollider = info.WheelColliderLeft;
             WheelCollider rightCollider = info.WheelColliderRight;
 
@@ -85,7 +78,7 @@ public class SimpleCarController : MonoBehaviour
 
             ////CurrentSpeed = 2 * 22 / 7 * left.radius * right.rpm * 60 / 1000; // Calculating speed in kmph
 
-            CurrentSpeed = RigidBody.velocity.magnitude * 2.23693629f;
+            CurrentSpeed = RigidBody.linearVelocity.magnitude * 2.23693629f;
             left.motorTorque = maxTorque * accel;
             right.motorTorque = maxTorque * accel;
 
@@ -108,13 +101,7 @@ public class SimpleCarController : MonoBehaviour
             CurrentWayPoint = NextWayPoint;
         }
 
-        BrakePress?.Invoke(RigidBody.velocity.magnitude < 3f);
-    }
-
-    public IEnumerator VehicleWaitSeconds (float sec) {
-        yield return new WaitForSeconds (sec);
-        Wait = (int) sec;
-        ShouldStop = false;
+        BrakePress?.Invoke(RigidBody.linearVelocity.magnitude < 3f);
     }
 }
 

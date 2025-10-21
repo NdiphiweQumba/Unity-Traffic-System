@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.IO;
 using UnityEditor;
@@ -112,7 +112,7 @@ public interface IVehicleSpecifics
 }
 
 [System.Serializable]
-public class EngineSpecs 
+public abstract class EngineSpecs 
 {
     public float[] gearRatios;
 

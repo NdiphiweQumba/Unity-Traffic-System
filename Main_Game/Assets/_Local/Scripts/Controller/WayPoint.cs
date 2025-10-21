@@ -1,13 +1,17 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class WayPoint : MonoBehaviour {
-    public WayPoint PreviousWayPoint;
+	
+	[ConditionalField(nameof(PreviousWayPoint), false)]
+	public WayPoint PreviousWayPoint;
+	[ConditionalField(nameof(NextWayPoint), false)]
     public WayPoint NextWayPoint;
 
     public bool IsExitPoint;
-    public List<WayPoint> Next_Points = new List<WayPoint>();
+	public List<WayPoint> Next_Points = new List<WayPoint>();
+    
     [Space(20)]
     public WayPoint[] WayPointsAround;
 

@@ -1,4 +1,4 @@
-using System.Diagnostics.Contracts;
+﻿using System.Diagnostics.Contracts;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -16,15 +16,18 @@ namespace UI
         {
             
         }
+        
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape))
                 LeaveGame();
         }
+        
         public void LeaveGame()
         {
             Application.Quit();
         }
+        
         public void StartGame() => SceneManager.LoadScene(SceneName);
         public void OpenClosePanel(string panelName) 
         {
@@ -37,8 +40,11 @@ namespace UI
                     new PanelItems(panelName, i.PanelItem);
             }
         }
+        
     }
 }
+
+
 [System.Serializable]
 public class PanelItems
 {
