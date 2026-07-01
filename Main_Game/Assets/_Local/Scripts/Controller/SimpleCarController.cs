@@ -47,9 +47,38 @@ public class CarController : MonoBehaviour
 	/// Primary interface used by player or AI to drive the car.
 	/// steer: -1..1, accel: -1..1 (negative = reverse), brake: 0..1
 	/// </summary>
+	[Space(30)]
+	public float LeftKey;
+	public float RightKey;
+
+	public float DownKey;
+	public float UpKey;
+
+
+	public UnityEngine.UI.Text text;
+
 	public void Drive(float steer, float accel, float brake)
 	{
 		// smooth the inputs to avoid jitter
+
+		LeftKey = Input.GetAxis("Horizontal") * -1;
+		RightKey = Input.GetAxis("Horizontal") * 1;
+		DownKey = Input.GetAxis("Vertical") * -1;
+		UpKey = Input.GetAxis("Vertical") * 1;
+
+
+		if (Input.GetKey(KeyCode.Space))
+		{
+			Debug.Log("Key Space is press by Teffu")
+				;
+			text.text = "Key Space is press by Teffu";
+		}
+		else
+		{
+			text.text = "_______________________";
+			Debug.Log("Key Space is not press by Teffu");
+		}
+
 		steerInputSmooth = Mathf.Lerp(steerInputSmooth, steer, Time.fixedDeltaTime * 8f);
 		torqueInputSmooth = Mathf.Lerp(torqueInputSmooth, accel, Time.fixedDeltaTime * 4f);
 		brakeInputSmooth = Mathf.Lerp(brakeInputSmooth, brake, Time.fixedDeltaTime * 10f);
