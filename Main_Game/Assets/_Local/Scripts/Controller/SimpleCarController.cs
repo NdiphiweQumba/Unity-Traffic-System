@@ -32,15 +32,23 @@ public class CarController : MonoBehaviour
 	private Rigidbody rb;
 	private Vector3 relativeVectorToWaypoint;
 	private float randomPerlin;
+	private WayPoint lastVisitedWaypoint;
 
 	private float steerInputSmooth;
 	private float torqueInputSmooth;
 	private float brakeInputSmooth;
 
+	private const float RuntimeDefaultTopSpeed = 20f;
+	private const float RuntimeDefaultMaxTorque = 300f;
+	private const float RuntimeDefaultMaxBrakeTorque = 2500f;
+	private const float RuntimeMaxTopSpeed = 22f;
+	private const float RuntimeMinTopSpeed = 12f;
+
 	private void Awake()
 	{
 		rb = GetComponent<Rigidbody>();
 		randomPerlin = UnityEngine.Random.value * 100f;
+		ApplyRuntimeTuning();
 
 		if (rb != null)
 		{
@@ -49,11 +57,139 @@ public class CarController : MonoBehaviour
 		}
 	}
 
+	private void OnValidate()
+	{
+		ApplyRuntimeTuning();
+	}
+
+	private void ApplyRuntimeTuning()
+	{
+		if (TopSpeed <= 0f)
+			TopSpeed = RuntimeDefaultTopSpeed;
+
+		TopSpeed = Mathf.Clamp(TopSpeed, RuntimeMinTopSpeed, RuntimeMaxTopSpeed);
+
+		if (maxTorque <= 0f || maxTorque > 500f)
+			maxTorque = RuntimeDefaultMaxTorque;
+
+		maxTorque = Mathf.Clamp(maxTorque, 200f, 350f);
+		MaxBrakeTorque = Mathf.Max(MaxBrakeTorque, RuntimeDefaultMaxBrakeTorque);
+		maxSteerAngle = Mathf.Clamp(maxSteerAngle, 20f, 35f);
+	}
+
 	private void FixedUpdate()
 	{
 		// update current speed (m/s) and call BrakePress so lights or other listeners can respond
 		CurrentSpeed = rb.linearVelocity.magnitude;
 		BrakePress?.Invoke(brakeInputSmooth > 0.1f || (CurrentSpeed < 0.5f && Mathf.Abs(torqueInputSmooth) < 0.05f));
+	}
+
+	public void EnsureUpcomingWaypoint()
+	{
+		if (CurrentWayPoint == null || (NextWayPoint != null && NextWayPoint != CurrentWayPoint))
+			return;
+
+		var currentWp = CurrentWayPoint.GetComponent<WayPoint>();
+		if (currentWp == null)
+			return;
+
+		var upcomingWaypoint = currentWp.ResolveNextWaypoint(lastVisitedWaypoint, GetApproachDirection());
+		NextWayPoint = upcomingWaypoint != null ? upcomingWaypoint.transform : null;
+	}
+
+	public void AdvanceWaypointIfNeeded()
+	{
+		if (CurrentWayPoint == null)
+			return;
+
+		EnsureUpcomingWaypoint();
+
+		Vector3 wheelCenter = GetWheelCenterPosition();
+		DistanceToWayPoint = Vector3.Distance(CurrentWayPoint.position, wheelCenter);
+		relativeVectorToWaypoint = transform.InverseTransformPoint(CurrentWayPoint.position);
+
+		Vector3 pathDirection = GetApproachDirection();
+		float signedDistanceAlongPath = Vector3.Dot(wheelCenter - CurrentWayPoint.position, pathDirection);
+		float lateralDistance = Vector3.Cross(pathDirection, wheelCenter - CurrentWayPoint.position).magnitude;
+		float waypointReachDistance = 2.5f;
+
+		var waypointComponent = CurrentWayPoint.GetComponent<WayPoint>();
+		if (waypointComponent != null)
+		{
+			waypointReachDistance = Mathf.Clamp(waypointComponent.Width * 0.45f, 2f, 4f);
+		}
+
+		bool reachedWaypoint = DistanceToWayPoint < waypointReachDistance;
+		bool passedWaypoint = signedDistanceAlongPath > 1.5f && lateralDistance < Mathf.Max(waypointReachDistance * 1.6f, 5f);
+		if (!reachedWaypoint && !passedWaypoint)
+			return;
+
+		Transform nextTarget = NextWayPoint;
+		if (nextTarget == null || nextTarget == CurrentWayPoint)
+		{
+			var currentWaypoint = CurrentWayPoint.GetComponent<WayPoint>();
+			var resolvedWaypoint = currentWaypoint != null ? currentWaypoint.ResolveNextWaypoint(lastVisitedWaypoint, GetApproachDirection()) : null;
+			nextTarget = resolvedWaypoint != null ? resolvedWaypoint.transform : null;
+		}
+
+		if (nextTarget == null)
+			return;
+
+		lastVisitedWaypoint = CurrentWayPoint.GetComponent<WayPoint>();
+		CurrentWayPoint = nextTarget;
+
+		var newCurrentWaypoint = CurrentWayPoint.GetComponent<WayPoint>();
+		if (newCurrentWaypoint != null)
+		{
+			var upcomingWaypoint = newCurrentWaypoint.ResolveNextWaypoint(lastVisitedWaypoint, GetApproachDirection());
+			NextWayPoint = upcomingWaypoint != null ? upcomingWaypoint.transform : null;
+		}
+		else
+		{
+			NextWayPoint = null;
+		}
+	}
+
+	public Vector3 GetPathDirection()
+	{
+		if (CurrentWayPoint == null)
+			return transform.forward;
+
+		if (NextWayPoint != null && NextWayPoint != CurrentWayPoint)
+		{
+			Vector3 toNext = NextWayPoint.position - CurrentWayPoint.position;
+			if (toNext.sqrMagnitude > 0.01f)
+				return toNext.normalized;
+		}
+
+		return CurrentWayPoint.forward;
+	}
+
+	public Vector3 GetApproachDirection()
+	{
+		if (CurrentWayPoint == null)
+			return transform.forward;
+
+		if (lastVisitedWaypoint != null)
+		{
+			Vector3 incoming = CurrentWayPoint.position - lastVisitedWaypoint.transform.position;
+			if (incoming.sqrMagnitude > 0.01f)
+				return incoming.normalized;
+		}
+
+		var currentWaypoint = CurrentWayPoint.GetComponent<WayPoint>();
+		if (currentWaypoint != null && currentWaypoint.PreviousWayPoint != null)
+		{
+			Vector3 incoming = CurrentWayPoint.position - currentWaypoint.PreviousWayPoint.transform.position;
+			if (incoming.sqrMagnitude > 0.01f)
+				return incoming.normalized;
+		}
+
+		Vector3 toCurrent = CurrentWayPoint.position - transform.position;
+		if (toCurrent.sqrMagnitude > 0.01f)
+			return toCurrent.normalized;
+
+		return transform.forward;
 	}
 
 	/// <summary>
@@ -164,27 +300,7 @@ public class CarController : MonoBehaviour
 		}
 
 		// update waypoint distances and relative vector (safe guard if CurrentWayPoint is null)
-		if (CurrentWayPoint != null)
-		{
-			Vector3 wheelCenter = GetWheelCenterPosition();
-			DistanceToWayPoint = Vector3.Distance(CurrentWayPoint.position, wheelCenter);
-			relativeVectorToWaypoint = transform.InverseTransformPoint(CurrentWayPoint.position);
-
-			if (DistanceToWayPoint < 7f)
-			{
-				var wp = CurrentWayPoint.GetComponent<WayPoint>();
-				if (wp != null)
-				{
-					if (wp.NextWayPoint != null)
-						NextWayPoint = wp.NextWayPoint.transform; // <-- use .transform
-					else if (wp.WayPointsAround != null && wp.WayPointsAround.Length > 0)
-						NextWayPoint = wp.WayPointsAround[UnityEngine.Random.Range(0, wp.WayPointsAround.Length)].transform; // <-- .transform
-				}
-
-				if (NextWayPoint != null)
-					CurrentWayPoint = NextWayPoint;
-			}
-		}
+		AdvanceWaypointIfNeeded();
 	}
 
 	private Vector3 GetWheelCenterPosition()

@@ -1679,16 +1679,16 @@ MonoBehaviour:
     Steer: 0
     Brakes: 0
     ReverseTurn: 0
-  TopSpeed: 10
-  maxTorque: 80
-  maxSteerAngle: 45
+  TopSpeed: 18
+  maxTorque: 250
+  maxSteerAngle: 30
   turnAngle: 5
   brake: 1
   Center: {fileID: 1990344899}
   ForwardDirection: {fileID: 0}
   CurrentWayPoint: {fileID: 0}
   CurrentSpeed: 0
-  MaxBrakeTorque: 1000
+  MaxBrakeTorque: 2200
   DistanceToWayPoint: 0
   ShouldStop: 0
   WaitTimeAtStop: 5
@@ -1707,9 +1707,9 @@ Rigidbody:
   m_AngularDrag: 0.05
   m_UseGravity: 1
   m_IsKinematic: 0
-  m_Interpolate: 0
+  m_Interpolate: 1
   m_Constraints: 0
-  m_CollisionDetection: 0
+  m_CollisionDetection: 2
 --- !u!65 &1241318960
 BoxCollider:
   m_ObjectHideFlags: 0

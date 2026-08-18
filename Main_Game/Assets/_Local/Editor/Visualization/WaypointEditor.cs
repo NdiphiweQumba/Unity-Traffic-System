@@ -60,6 +60,22 @@ public static class WaypointEditor
 				Gizmos.DrawLine(waypoint.transform.position + offset, next.transform.position + offsetTo);
 			}
 		}
+
+		if (waypoint.WayPointsAround != null)
+		{
+			Gizmos.color = Color.cyan;
+			for (int i = 0; i < waypoint.WayPointsAround.Length; i++)
+			{
+				var branch = waypoint.WayPointsAround[i];
+				if (branch == null)
+					continue;
+
+				float branchHalf = Mathf.Max(0.01f, branch.Width * 0.5f);
+				Vector3 from = waypoint.transform.position + (waypoint.transform.right * halfWidth * 0.25f);
+				Vector3 to = branch.transform.position + (branch.transform.right * branchHalf * 0.25f);
+				Gizmos.DrawLine(from, to);
+			}
+		}
 	}
 }
 #endif
