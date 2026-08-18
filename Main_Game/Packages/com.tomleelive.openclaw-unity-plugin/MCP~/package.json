@@ -1,0 +1,25 @@
+{
+  "name": "openclaw-unity-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for OpenClaw Unity Plugin - enables Claude Code integration",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "openclaw-unity-mcp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "mcp",
+    "unity",
+    "claude",
+    "ai",
+    "game-development"
+  ],
+  "author": "TomLeeLive",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0"
+  }
+}

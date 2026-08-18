@@ -1,0 +1,452 @@
+/*
+ * OpenClaw Unity Plugin
+ * https://github.com/TomLeeLive/openclaw-unity-plugin
+ * MIT License
+ */
+
+using UnityEngine;
+using UnityEditor;
+using OpenClaw.Unity;
+
+namespace OpenClaw.Unity.Editor
+{
+    /// <summary>
+    /// Editor window for OpenClaw configuration and status.
+    /// </summary>
+    public class OpenClawWindow : EditorWindow
+    {
+        private OpenClawConfig _config;
+        private Vector2 _scrollPos;
+        private bool _showGateway = true;
+        private bool _showMCP = true;
+        private bool _showTools = true;
+        private bool _showLogs = true;
+        
+        [MenuItem("Window/OpenClaw Plugin/Settings", false, 0)]
+        public static void ShowWindow()
+        {
+            var window = GetWindow<OpenClawWindow>("OpenClaw Plugin");
+            window.minSize = new Vector2(350, 400);
+        }
+        
+        private void OnEnable()
+        {
+            LoadOrCreateConfig();
+        }
+        
+        private void LoadOrCreateConfig()
+        {
+            _config = Resources.Load<OpenClawConfig>("OpenClawConfig");
+            
+            if (_config == null)
+            {
+                // Create default config
+                _config = CreateInstance<OpenClawConfig>();
+                
+                // Ensure Resources folder exists
+                if (!AssetDatabase.IsValidFolder("Assets/Resources"))
+                {
+                    AssetDatabase.CreateFolder("Assets", "Resources");
+                }
+                
+                AssetDatabase.CreateAsset(_config, "Assets/Resources/OpenClawConfig.asset");
+                AssetDatabase.SaveAssets();
+                
+                Debug.Log("[OpenClaw] Created default config at Assets/Resources/OpenClawConfig.asset");
+            }
+        }
+        
+        private void OnGUI()
+        {
+            if (_config == null)
+            {
+                LoadOrCreateConfig();
+                return;
+            }
+            
+            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
+            
+            DrawHeader();
+            EditorGUILayout.Space(10);
+            DrawGatewaySection();
+            EditorGUILayout.Space(10);
+            DrawMCPSection();
+            EditorGUILayout.Space(10);
+            DrawConfiguration();
+            EditorGUILayout.Space(10);
+            DrawTools();
+            EditorGUILayout.Space(10);
+            DrawLogs();
+            
+            EditorGUILayout.EndScrollView();
+        }
+        
+        private void DrawHeader()
+        {
+            EditorGUILayout.BeginHorizontal();
+            
+            GUILayout.FlexibleSpace();
+            
+            var headerStyle = new GUIStyle(EditorStyles.boldLabel)
+            {
+                fontSize = 18,
+                alignment = TextAnchor.MiddleCenter
+            };
+            
+            EditorGUILayout.LabelField("🦞 OpenClaw Unity Plugin", headerStyle, GUILayout.Height(30));
+            
+            GUILayout.FlexibleSpace();
+            
+            EditorGUILayout.EndHorizontal();
+            
+            EditorGUILayout.LabelField("Connect Unity to your AI assistant", EditorStyles.centeredGreyMiniLabel);
+        }
+        
+        private void DrawGatewaySection()
+        {
+            _showGateway = EditorGUILayout.Foldout(_showGateway, "Gateway Connection (Remote)", true);
+            
+            if (!_showGateway) return;
+            
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            
+            EditorGUILayout.LabelField("Connect to OpenClaw Gateway for remote AI access", EditorStyles.miniLabel);
+            EditorGUILayout.Space(3);
+            
+            // Use the unified connection manager via EditorBridge
+            var connManager = OpenClawConnectionManager.Instance;
+            var state = connManager?.State ?? OpenClawConnectionManager.ConnectionState.Disconnected;
+            var isConnected = state == OpenClawConnectionManager.ConnectionState.Connected;
+            var sessionId = connManager?.SessionId;
+            
+            // Status indicator
+            EditorGUILayout.BeginHorizontal();
+            
+            var (statusColor, statusText) = state switch
+            {
+                OpenClawConnectionManager.ConnectionState.Connected => (Color.green, "Connected"),
+                OpenClawConnectionManager.ConnectionState.Connecting => (Color.yellow, "Connecting..."),
+                OpenClawConnectionManager.ConnectionState.Reconnecting => (Color.yellow, "Reconnecting..."),
+                OpenClawConnectionManager.ConnectionState.Error => (Color.red, "Error"),
+                _ => (Color.gray, "Disconnected")
+            };
+            
+            var oldColor = GUI.color;
+            GUI.color = statusColor;
+            EditorGUILayout.LabelField("●", GUILayout.Width(20));
+            GUI.color = oldColor;
+            
+            EditorGUILayout.LabelField($"Status: {statusText}");
+            
+            // Mode indicator
+            var modeText = Application.isPlaying ? "(Play)" : "(Editor)";
+            EditorGUILayout.LabelField(modeText, EditorStyles.miniLabel, GUILayout.Width(60));
+            
+            EditorGUILayout.EndHorizontal();
+            
+            // Session ID
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                EditorGUILayout.LabelField($"Session: {sessionId}", EditorStyles.miniLabel);
+            }
+            
+            // Error message
+            if (!string.IsNullOrEmpty(connManager?.LastError) && state == OpenClawConnectionManager.ConnectionState.Error)
+            {
+                EditorGUILayout.HelpBox(connManager.LastError, MessageType.Error);
+            }
+            
+            EditorGUILayout.Space(5);
+            
+            // Buttons
+            EditorGUILayout.BeginHorizontal();
+            
+            GUI.enabled = state != OpenClawConnectionManager.ConnectionState.Connecting;
+            
+            if (isConnected)
+            {
+                if (GUILayout.Button("Disconnect"))
+                {
+                    OpenClawEditorBridge.Disconnect();
+                }
+            }
+            else
+            {
+                if (GUILayout.Button("Connect"))
+                {
+                    OpenClawEditorBridge.Connect();
+                }
+            }
+            
+            GUI.enabled = true;
+            
+            if (GUILayout.Button("Test Connection"))
+            {
+                TestConnection();
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            EditorGUILayout.EndVertical();
+        }
+        
+        private void DrawMCPSection()
+        {
+            _showMCP = EditorGUILayout.Foldout(_showMCP, "MCP Bridge (Local)", true);
+            
+            if (!_showMCP) return;
+            
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            
+            EditorGUILayout.LabelField("Direct connection for Claude Code, Cursor, etc.", EditorStyles.miniLabel);
+            EditorGUILayout.Space(3);
+            
+            var bridge = OpenClawMCPBridge.Instance;
+            var isRunning = bridge.IsRunning;
+            
+            // Status indicator
+            EditorGUILayout.BeginHorizontal();
+            
+            var oldColor = GUI.color;
+            GUI.color = isRunning ? Color.green : Color.gray;
+            EditorGUILayout.LabelField("●", GUILayout.Width(20));
+            GUI.color = oldColor;
+            
+            EditorGUILayout.LabelField(isRunning ? "Running" : "Stopped");
+            
+            if (isRunning)
+            {
+                EditorGUILayout.LabelField($"Port: {bridge.Port}", EditorStyles.miniLabel, GUILayout.Width(80));
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            // Connection URL
+            if (isRunning)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField($"URL: http://127.0.0.1:{bridge.Port}", EditorStyles.miniLabel);
+                if (GUILayout.Button("Copy", GUILayout.Width(50)))
+                {
+                    GUIUtility.systemCopyBuffer = $"http://127.0.0.1:{bridge.Port}";
+                    Debug.Log("[OpenClaw MCP] URL copied to clipboard");
+                }
+                EditorGUILayout.EndHorizontal();
+            }
+            
+            // Error message
+            if (!string.IsNullOrEmpty(bridge.LastError))
+            {
+                EditorGUILayout.HelpBox(bridge.LastError, MessageType.Error);
+            }
+            
+            EditorGUILayout.Space(5);
+            
+            // Buttons
+            EditorGUILayout.BeginHorizontal();
+            
+            if (isRunning)
+            {
+                if (GUILayout.Button("Stop MCP Bridge"))
+                {
+                    OpenClawMCPBridgeEditor.StopMCPBridge();
+                }
+            }
+            else
+            {
+                if (GUILayout.Button("Start MCP Bridge"))
+                {
+                    OpenClawMCPBridgeEditor.StartMCPBridge();
+                }
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            // MCP Setup info
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Claude Code Setup:", EditorStyles.miniBoldLabel);
+            
+            var mcpCommand = "claude mcp add unity -- node <path>/MCP~/index.js";
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.SelectableLabel(mcpCommand, EditorStyles.miniTextField, GUILayout.Height(18));
+            if (GUILayout.Button("?", GUILayout.Width(20)))
+            {
+                Application.OpenURL("https://github.com/TomLeeLive/openclaw-unity-plugin#mcp-integration");
+            }
+            EditorGUILayout.EndHorizontal();
+            
+            EditorGUILayout.EndVertical();
+        }
+        
+        private void DrawConfiguration()
+        {
+            EditorGUILayout.LabelField("Configuration", EditorStyles.boldLabel);
+            
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            
+            EditorGUI.BeginChangeCheck();
+            
+            _config.gatewayUrl = EditorGUILayout.TextField("Gateway URL", _config.gatewayUrl);
+            _config.apiToken = EditorGUILayout.PasswordField("API Token", _config.apiToken);
+            
+            EditorGUILayout.Space(5);
+            
+            _config.autoConnect = EditorGUILayout.Toggle("Auto Connect", _config.autoConnect);
+            _config.showStatusOverlay = EditorGUILayout.Toggle("Show Status Overlay", _config.showStatusOverlay);
+            _config.heartbeatInterval = EditorGUILayout.FloatField("Heartbeat Interval (s)", _config.heartbeatInterval);
+            
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Logging", EditorStyles.miniBoldLabel);
+            
+            _config.captureConsoleLogs = EditorGUILayout.Toggle("Capture Console Logs", _config.captureConsoleLogs);
+            _config.maxLogEntries = EditorGUILayout.IntField("Max Log Entries", _config.maxLogEntries);
+            _config.minLogLevel = (OpenClawConfig.LogLevel)EditorGUILayout.EnumPopup("Min Log Level", _config.minLogLevel);
+            
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("MCP Bridge", EditorStyles.miniBoldLabel);
+            
+            _config.enableMCPBridge = EditorGUILayout.Toggle("Enable MCP Bridge", _config.enableMCPBridge);
+            _config.mcpBridgePort = EditorGUILayout.IntField("MCP Bridge Port", _config.mcpBridgePort);
+            
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Security", EditorStyles.miniBoldLabel);
+            
+            _config.allowCodeExecution = EditorGUILayout.Toggle("Allow Code Execution", _config.allowCodeExecution);
+            _config.allowFileAccess = EditorGUILayout.Toggle("Allow File Access", _config.allowFileAccess);
+            _config.allowSceneModification = EditorGUILayout.Toggle("Allow Scene Modification", _config.allowSceneModification);
+            
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorUtility.SetDirty(_config);
+            }
+            
+            EditorGUILayout.Space(5);
+            
+            if (GUILayout.Button("Select Config Asset"))
+            {
+                Selection.activeObject = _config;
+                EditorGUIUtility.PingObject(_config);
+            }
+            
+            EditorGUILayout.EndVertical();
+        }
+        
+        private void DrawTools()
+        {
+            _showTools = EditorGUILayout.Foldout(_showTools, "Available Tools", true);
+            
+            if (!_showTools) return;
+            
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            
+            var tools = new[]
+            {
+                ("console.*", "Log capture and management"),
+                ("scene.*", "Scene listing and loading"),
+                ("gameobject.*", "Find, create, modify GameObjects"),
+                ("transform.*", "Position, rotation, scale"),
+                ("component.*", "Add, remove, modify components"),
+                ("script.*", "Read script files"),
+                ("app.*", "Play mode control"),
+                ("editor.*", "Editor control (aliases for app.*)"),
+                ("input.*", "Keyboard/mouse input simulation"),
+                ("debug.*", "Logging, screenshots, hierarchy")
+            };
+            
+            foreach (var (name, desc) in tools)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(name, EditorStyles.miniLabel, GUILayout.Width(100));
+                EditorGUILayout.LabelField(desc, EditorStyles.miniLabel);
+                EditorGUILayout.EndHorizontal();
+            }
+            
+            EditorGUILayout.EndVertical();
+        }
+        
+        private void DrawLogs()
+        {
+            _showLogs = EditorGUILayout.Foldout(_showLogs, "Recent Logs", true);
+            
+            if (!_showLogs) return;
+            
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            
+            var bridge = OpenClawBridge.Instance;
+            if (bridge?.Logger != null)
+            {
+                var logs = bridge.Logger.GetLogs(10);
+                
+                if (logs.Count == 0)
+                {
+                    EditorGUILayout.LabelField("No logs captured", EditorStyles.centeredGreyMiniLabel);
+                }
+                else
+                {
+                    foreach (var log in logs)
+                    {
+                        var icon = log.type switch
+                        {
+                            LogType.Error or LogType.Exception => "❌",
+                            LogType.Warning => "⚠️",
+                            _ => "ℹ️"
+                        };
+                        
+                        var msg = log.message.Length > 80 ? log.message.Substring(0, 77) + "..." : log.message;
+                        EditorGUILayout.LabelField($"{icon} [{log.timestamp:HH:mm:ss}] {msg}", EditorStyles.miniLabel);
+                    }
+                }
+                
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField($"Total: {bridge.Logger.Count} logs", EditorStyles.miniLabel);
+                if (GUILayout.Button("Clear", GUILayout.Width(50)))
+                {
+                    bridge.Logger.Clear();
+                }
+                EditorGUILayout.EndHorizontal();
+            }
+            else
+            {
+                EditorGUILayout.LabelField("Logger not active", EditorStyles.centeredGreyMiniLabel);
+            }
+            
+            EditorGUILayout.EndVertical();
+        }
+        
+        private void TestConnection()
+        {
+            var url = _config.GetFullUrl("unity/status");
+            
+            Debug.Log($"[OpenClaw] Testing connection to {url}...");
+            
+            var request = UnityEngine.Networking.UnityWebRequest.Get(url);
+            if (!string.IsNullOrWhiteSpace(_config.apiToken))
+            {
+                request.SetRequestHeader("Authorization", $"Bearer {_config.apiToken}");
+            }
+            var operation = request.SendWebRequest();
+            
+            operation.completed += _ =>
+            {
+                if (request.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
+                {
+                    Debug.Log($"[OpenClaw] ✓ Connection successful! Response: {request.downloadHandler.text}");
+                    EditorUtility.DisplayDialog("Connection Test", "Successfully connected to OpenClaw gateway!", "OK");
+                }
+                else
+                {
+                    Debug.LogError($"[OpenClaw] ✗ Connection failed: {request.error}");
+                    EditorUtility.DisplayDialog("Connection Test", $"Failed to connect:\n{request.error}", "OK");
+                }
+                
+                request.Dispose();
+            };
+        }
+        
+        private void OnInspectorUpdate()
+        {
+            // Refresh window periodically
+            Repaint();
+        }
+    }
+}

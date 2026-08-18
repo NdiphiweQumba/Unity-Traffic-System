@@ -19,20 +19,31 @@ public class AIVehicleController : MonoBehaviour
 	public bool IsDriving = true;
 	[Tooltip("Used to nudge cars laterally so they don't take identical path")]
 	public float wanderAmount = 1.5f;
+	[Tooltip("How long to hold the brake after a hard collision.")]
+	public float collisionBrakeDuration = 0.8f;
 
 	private CarController car;
 	private Rigidbody rb;
+	private Collider[] ownColliders;
 	private float randomPerlin;
-	private float lastBrakeRequestTime = 0f;
+	private float blockedUntilTime = 0f;
+	private float collisionSteerBias = 0f;
 	private IntersectionZone currentIntersectionZone;
 
-	private void Start()
+	private void Awake()
 	{
 		car = GetComponent<CarController>();
 		rb = GetComponent<Rigidbody>();
+		ownColliders = GetComponentsInChildren<Collider>();
 		randomPerlin = Random.value * 100f;
 		if (obstacleMask.value == 0)
-			obstacleMask = LayerMask.GetMask("Default"); // fallback
+			obstacleMask = Physics.DefaultRaycastLayers;
+
+		if (rb != null)
+		{
+			rb.interpolation = RigidbodyInterpolation.Interpolate;
+			rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+		}
 	}
 
 	private void FixedUpdate()
@@ -54,7 +65,8 @@ public class AIVehicleController : MonoBehaviour
 
 		// compute target offset so cars don't run exact center line
 		Vector3 targetPos = car.CurrentWayPoint.position;
-		targetPos += car.CurrentWayPoint.right * ((Mathf.PerlinNoise(Time.time * 0.1f, randomPerlin) * 2f - 1f) * wanderAmount);
+		float lateralNoise = Mathf.PerlinNoise(Time.time * 0.1f, randomPerlin) * 2f - 1f;
+		targetPos += car.CurrentWayPoint.right * (lateralNoise * wanderAmount);
 
 		// basic steering to waypoint
 		Vector3 localTarget = transform.InverseTransformPoint(targetPos);
@@ -75,10 +87,10 @@ public class AIVehicleController : MonoBehaviour
 		float obstacleDistance = Mathf.Infinity;
 		RaycastHit hit;
 
-		Vector3 sensorOrigin = transform.position + transform.up * 0.5f + transform.forward * 1.2f;
+		Vector3 sensorOrigin = transform.position + transform.up * 0.8f + transform.forward * 1.2f;
 
 		// center forward sensor
-		if (Physics.Raycast(sensorOrigin, transform.forward, out hit, sensorLength, obstacleMask))
+		if (TryGetObstacle(sensorOrigin, transform.forward, sensorLength, out hit))
 		{
 			obstacleInFront = true;
 			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
@@ -88,34 +100,34 @@ public class AIVehicleController : MonoBehaviour
 		Vector3 rightDir = Quaternion.AngleAxis(sideSensorAngle, transform.up) * transform.forward;
 		Vector3 leftDir = Quaternion.AngleAxis(-sideSensorAngle, transform.up) * transform.forward;
 
-		if (Physics.Raycast(sensorOrigin, rightDir, out hit, sensorLength, obstacleMask))
+		if (TryGetObstacle(sensorOrigin, rightDir, sensorLength * 0.9f, out hit))
 		{
 			obstacleInFront = true;
 			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
 			// steer away from obstacle
-			steerAngle -= 0.5f;
+			steerAngle -= 0.6f;
 		}
-		if (Physics.Raycast(sensorOrigin, leftDir, out hit, sensorLength, obstacleMask))
+		if (TryGetObstacle(sensorOrigin, leftDir, sensorLength * 0.9f, out hit))
 		{
 			obstacleInFront = true;
 			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
-			steerAngle += 0.5f;
+			steerAngle += 0.6f;
 		}
 
 		// lateral clearance sensors (helps avoid scraping at intersections)
 		Vector3 rightSensorOrigin = sensorOrigin + transform.right * sensorSpacing;
 		Vector3 leftSensorOrigin = sensorOrigin - transform.right * sensorSpacing;
-		if (Physics.Raycast(rightSensorOrigin, transform.forward, out hit, sensorLength, obstacleMask))
+		if (TryGetObstacle(rightSensorOrigin, transform.forward, sensorLength * 0.8f, out hit))
 		{
 			obstacleInFront = true;
 			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
-			steerAngle -= 0.2f;
+			steerAngle -= 0.3f;
 		}
-		if (Physics.Raycast(leftSensorOrigin, transform.forward, out hit, sensorLength, obstacleMask))
+		if (TryGetObstacle(leftSensorOrigin, transform.forward, sensorLength * 0.8f, out hit))
 		{
 			obstacleInFront = true;
 			obstacleDistance = Mathf.Min(obstacleDistance, hit.distance);
-			steerAngle += 0.2f;
+			steerAngle += 0.3f;
 		}
 
 		// Intersection handling (if we're waiting for permission to enter intersection, we should stop)
@@ -139,7 +151,13 @@ public class AIVehicleController : MonoBehaviour
 		float accelInput = 0f;
 		float brakeInput = 0f;
 
-		if (obstacleInFront)
+		if (Time.time < blockedUntilTime)
+		{
+			accelInput = 0f;
+			brakeInput = 1f;
+			steerAngle = Mathf.Clamp(steerAngle + collisionSteerBias, -1f, 1f);
+		}
+		else if (obstacleInFront)
 		{
 			// strong braking if close
 			if (obstacleDistance < stopDistance)
@@ -205,5 +223,68 @@ public class AIVehicleController : MonoBehaviour
 	{
 		yield return new WaitForSeconds(seconds);
 		IsDriving = true;
+	}
+
+	private void OnCollisionEnter(Collision collision)
+	{
+		HandleCollision(collision);
+	}
+
+	private void OnCollisionStay(Collision collision)
+	{
+		HandleCollision(collision);
+	}
+
+	private bool TryGetObstacle(Vector3 origin, Vector3 direction, float length, out RaycastHit closestHit)
+	{
+		var hits = Physics.RaycastAll(origin, direction.normalized, length, obstacleMask, QueryTriggerInteraction.Ignore);
+		float bestDistance = float.PositiveInfinity;
+		closestHit = default;
+
+		for (int i = 0; i < hits.Length; i++)
+		{
+			var candidate = hits[i];
+			if (candidate.collider == null || IsOwnCollider(candidate.collider))
+				continue;
+
+			if (candidate.distance < bestDistance)
+			{
+				bestDistance = candidate.distance;
+				closestHit = candidate;
+			}
+		}
+
+		return bestDistance < float.PositiveInfinity;
+	}
+
+	private bool IsOwnCollider(Collider collider)
+	{
+		if (collider == null) return false;
+
+		for (int i = 0; i < ownColliders.Length; i++)
+		{
+			if (ownColliders[i] == collider)
+				return true;
+		}
+
+		return false;
+	}
+
+	private void HandleCollision(Collision collision)
+	{
+		if (collision == null || collision.contactCount == 0)
+			return;
+
+		blockedUntilTime = Time.time + collisionBrakeDuration;
+
+		Vector3 localContact = transform.InverseTransformPoint(collision.GetContact(0).point);
+		if (Mathf.Abs(localContact.x) > 0.05f)
+		{
+			collisionSteerBias = localContact.x > 0f ? -0.75f : 0.75f;
+		}
+		else
+		{
+			collisionSteerBias = Random.value > 0.5f ? 0.5f : -0.5f;
+		}
 	}
 }

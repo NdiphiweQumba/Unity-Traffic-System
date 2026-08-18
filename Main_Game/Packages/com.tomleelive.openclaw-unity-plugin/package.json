@@ -1,0 +1,32 @@
+{
+  "name": "com.tomleelive.openclaw-unity-plugin",
+  "displayName": "OpenClaw Unity Plugin",
+  "version": "1.6.2",
+  "unity": "2021.3",
+  "description": "Connect Unity to OpenClaw AI assistant. Works in Editor & Play mode. Execute code, inspect GameObjects, manage scenes, and debug with natural language.",
+  "author": {
+    "name": "TomLeeLive",
+    "url": "https://github.com/TomLeeLive"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TomLeeLive/openclaw-unity-plugin.git"
+  },
+  "keywords": [
+    "AI",
+    "OpenClaw",
+    "Plugin",
+    "Assistant",
+    "Automation",
+    "Code Generation"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Basic Setup",
+      "description": "Basic scene with OpenClaw plugin configured",
+      "path": "Samples~/BasicSetup"
+    }
+  ]
+}

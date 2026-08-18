@@ -22,6 +22,13 @@ public class CarController : MonoBehaviour
 	public float CurrentSpeed { get; private set; } // m/s
 	public float DistanceToWayPoint { get; private set; }
 
+	[Header("Input")]
+	[Tooltip("Enable only for a player-driven car. AI cars should leave this off.")]
+	public bool allowDirectPlayerInput = false;
+
+	[Tooltip("Optional debug label for player input state.")]
+	public UnityEngine.UI.Text debugStatusText;
+
 	private Rigidbody rb;
 	private Vector3 relativeVectorToWaypoint;
 	private float randomPerlin;
@@ -34,13 +41,19 @@ public class CarController : MonoBehaviour
 	{
 		rb = GetComponent<Rigidbody>();
 		randomPerlin = UnityEngine.Random.value * 100f;
+
+		if (rb != null)
+		{
+			rb.interpolation = RigidbodyInterpolation.Interpolate;
+			rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+		}
 	}
 
 	private void FixedUpdate()
 	{
 		// update current speed (m/s) and call BrakePress so lights or other listeners can respond
 		CurrentSpeed = rb.linearVelocity.magnitude;
-		BrakePress?.Invoke(rb.linearVelocity.magnitude < 0.5f && rb.linearVelocity.sqrMagnitude > 0f); // small threshold
+		BrakePress?.Invoke(brakeInputSmooth > 0.1f || (CurrentSpeed < 0.5f && Mathf.Abs(torqueInputSmooth) < 0.05f));
 	}
 
 	/// <summary>
@@ -59,26 +72,31 @@ public class CarController : MonoBehaviour
 
 	public void Drive(float steer, float accel, float brake)
 	{
-		// smooth the inputs to avoid jitter
-
-		LeftKey = Input.GetAxis("Horizontal") * -1;
-		RightKey = Input.GetAxis("Horizontal") * 1;
-		DownKey = Input.GetAxis("Vertical") * -1;
-		UpKey = Input.GetAxis("Vertical") * 1;
-
-
-		if (Input.GetKey(KeyCode.Space))
+		if (allowDirectPlayerInput)
 		{
-			Debug.Log("Key Space is press by Teffu")
-				;
-			text.text = "Key Space is press by Teffu";
+			steer = Input.GetAxis("Horizontal");
+			accel = Mathf.Max(0f, Input.GetAxis("Vertical"));
+			brake = Mathf.Clamp01(-Input.GetAxis("Vertical"));
+
+			LeftKey = Mathf.Max(0f, -steer);
+			RightKey = Mathf.Max(0f, steer);
+			DownKey = brake;
+			UpKey = accel;
+
+			if (debugStatusText != null)
+			{
+				debugStatusText.text = Input.GetKey(KeyCode.Space) ? "Brake key pressed" : string.Empty;
+			}
 		}
 		else
 		{
-			text.text = "_______________________";
-			Debug.Log("Key Space is not press by Teffu");
+			LeftKey = steer < 0f ? -steer : 0f;
+			RightKey = steer > 0f ? steer : 0f;
+			DownKey = brake;
+			UpKey = accel > 0f ? accel : 0f;
 		}
 
+		// smooth the inputs to avoid jitter
 		steerInputSmooth = Mathf.Lerp(steerInputSmooth, steer, Time.fixedDeltaTime * 8f);
 		torqueInputSmooth = Mathf.Lerp(torqueInputSmooth, accel, Time.fixedDeltaTime * 4f);
 		brakeInputSmooth = Mathf.Lerp(brakeInputSmooth, brake, Time.fixedDeltaTime * 10f);
@@ -107,8 +125,10 @@ public class CarController : MonoBehaviour
 			if (info.Steer)
 			{
 				float targetAngle = maxSteerAngle * steerInputSmooth;
-				info.WheelColliderLeft.steerAngle = Mathf.Lerp(info.WheelColliderLeft.steerAngle, targetAngle, Time.fixedDeltaTime * 8f);
-				info.WheelColliderRight.steerAngle = Mathf.Lerp(info.WheelColliderRight.steerAngle, targetAngle, Time.fixedDeltaTime * 8f);
+				if (info.WheelColliderLeft != null)
+					info.WheelColliderLeft.steerAngle = Mathf.Lerp(info.WheelColliderLeft.steerAngle, targetAngle, Time.fixedDeltaTime * 8f);
+				if (info.WheelColliderRight != null)
+					info.WheelColliderRight.steerAngle = Mathf.Lerp(info.WheelColliderRight.steerAngle, targetAngle, Time.fixedDeltaTime * 8f);
 			}
 
 			// motor torque (applied only to motor wheels)
@@ -118,8 +138,13 @@ public class CarController : MonoBehaviour
 				// reverse torque control
 				if (torqueInputSmooth < 0)
 					appliedTorque *= 0.5f; // reduce reverse torque
-				info.WheelColliderLeft.motorTorque = Mathf.Lerp(info.WheelColliderLeft.motorTorque, appliedTorque, Time.fixedDeltaTime * 4f);
-				info.WheelColliderRight.motorTorque = Mathf.Lerp(info.WheelColliderRight.motorTorque, appliedTorque, Time.fixedDeltaTime * 4f);
+				if (brakeInputSmooth > 0.05f)
+					appliedTorque = 0f;
+
+				if (info.WheelColliderLeft != null)
+					info.WheelColliderLeft.motorTorque = Mathf.Lerp(info.WheelColliderLeft.motorTorque, appliedTorque, Time.fixedDeltaTime * 4f);
+				if (info.WheelColliderRight != null)
+					info.WheelColliderRight.motorTorque = Mathf.Lerp(info.WheelColliderRight.motorTorque, appliedTorque, Time.fixedDeltaTime * 4f);
 			}
 
 			// brakes
@@ -128,8 +153,13 @@ public class CarController : MonoBehaviour
 				float appliedBrake = MaxBrakeTorque * brakeInputSmooth;
 				// if braking while above top speed, add a bit more braking force
 				if (rb.linearVelocity.magnitude > TopSpeed) appliedBrake += (rb.linearVelocity.magnitude - TopSpeed) * 200f;
-				info.WheelColliderLeft.brakeTorque = Mathf.Lerp(info.WheelColliderLeft.brakeTorque, appliedBrake, Time.fixedDeltaTime * 10f);
-				info.WheelColliderRight.brakeTorque = Mathf.Lerp(info.WheelColliderRight.brakeTorque, appliedBrake, Time.fixedDeltaTime * 10f);
+				if (torqueInputSmooth > 0.1f && brakeInputSmooth < 0.05f)
+					appliedBrake = 0f;
+
+				if (info.WheelColliderLeft != null)
+					info.WheelColliderLeft.brakeTorque = Mathf.Lerp(info.WheelColliderLeft.brakeTorque, appliedBrake, Time.fixedDeltaTime * 10f);
+				if (info.WheelColliderRight != null)
+					info.WheelColliderRight.brakeTorque = Mathf.Lerp(info.WheelColliderRight.brakeTorque, appliedBrake, Time.fixedDeltaTime * 10f);
 			}
 		}
 
